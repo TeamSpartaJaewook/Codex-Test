@@ -1,0 +1,19 @@
+{
+  "type": "google-sheets",
+  "spreadsheetId": "1KsPQnMqVj-Q6sGegBk4EE_e3IBGzsN5f",
+  "spreadsheetUrl": "https://docs.google.com/spreadsheets/d/1KsPQnMqVj-Q6sGegBk4EE_e3IBGzsN5f/edit?gid=364222562#gid=364222562",
+  "sheetNames": [
+    "economy",
+    "buildings",
+    "player",
+    "miniScv",
+    "barracks",
+    "upgrades",
+    "cards",
+    "enemies",
+    "waves",
+    "specialMineral"
+  ],
+  "pollIntervalSec": 8,
+  "updatedAt": "2026-02-15T15:50:18.265Z"
+}

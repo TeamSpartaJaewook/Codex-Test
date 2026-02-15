@@ -7,7 +7,14 @@
     "node": ">=20"
   },
   "scripts": {
+    "prestart": "node tools/balance-tool.js build",
     "start": "node server.js",
-    "dev": "HOST=127.0.0.1 PORT=8787 node server.js"
+    "predev": "node tools/balance-tool.js build",
+    "dev": "HOST=127.0.0.1 PORT=8787 node server.js",
+    "balance:set-url": "node tools/balance-tool.js set-url",
+    "balance:build": "node tools/balance-tool.js build",
+    "balance:watch": "node tools/balance-tool.js watch",
+    "balance:list": "node tools/balance-tool.js list",
+    "balance:get": "node tools/balance-tool.js get"
   }
 }

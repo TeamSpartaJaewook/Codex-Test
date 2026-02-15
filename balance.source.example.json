@@ -1,0 +1,8 @@
+{
+  "type": "google-sheets",
+  "spreadsheetId": "PUT_YOUR_SPREADSHEET_ID_HERE",
+  "spreadsheetUrl": "https://docs.google.com/spreadsheets/d/PUT_YOUR_SPREADSHEET_ID_HERE/edit",
+  "sheetNames": [],
+  "pollIntervalSec": 8,
+  "updatedAt": "2026-02-16T00:00:00.000Z"
+}

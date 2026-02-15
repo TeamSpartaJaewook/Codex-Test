@@ -66,8 +66,138 @@
   const TEAM_FRIENDLY = 'friendly';
   const TEAM_ENEMY = 'enemy';
 
-  const MANUAL_WORKER_COST = 45;
-  const BARRACKS_MAX_LEVEL = 3;
+  const RAW_BALANCE = (typeof window !== 'undefined' && window.GAME_BALANCE && typeof window.GAME_BALANCE === 'object')
+    ? window.GAME_BALANCE
+    : {};
+
+  function b(path, fallback) {
+    const parts = path.split('.');
+    let cur = RAW_BALANCE;
+    for (let i = 0; i < parts.length; i += 1) {
+      if (!cur || typeof cur !== 'object' || !(parts[i] in cur)) return fallback;
+      cur = cur[parts[i]];
+    }
+    return cur;
+  }
+
+  const MANUAL_WORKER_COST = b('economy.manualWorkerCost', 45);
+  const START_RESOURCES = b('economy.startResources', 320);
+  const ENEMY_KILL_REWARD = b('economy.enemyKillReward', 2);
+  const PLAYER_DEATH_PENALTY = b('economy.playerDeathPenalty', 60);
+  const REPAIR_MINERAL_PER_HP = b('economy.repairMineralPerHp', 0.28);
+  const ENEMY_DEATH_EXPLODE_CHANCE = b('enemies.deathExplosionChance', 0.28);
+
+  const BUILDING_HP_LEVEL_SCALE = b('buildings.hpLevelScalePerLevel', 0.52);
+  const BUILDING_UPGRADE_COST_BASE = b('buildings.turretUpgradeCostBase', 1.35);
+  const BUILDING_UPGRADE_COST_PER_LEVEL = b('buildings.turretUpgradeCostPerLevel', 0.75);
+  const SUPPLY_POP_BONUS = b('buildings.supplyPopBonus', 5);
+  const BASE_POPULATION = b('buildings.basePopulation', 10);
+
+  const PLAYER_BASE_SPEED = b('player.baseSpeed', 185);
+  const PLAYER_BASE_DAMAGE = b('player.baseDamage', 14);
+  const PLAYER_BASE_DEFENSE = b('player.baseDefense', 1);
+  const PLAYER_BASE_MAX_HP = b('player.baseMaxHp', 240);
+  const PLAYER_MINE_RATE = b('player.mineRate', 0.75);
+
+  const MINI_SCV_BASE_SPEED = b('miniScv.baseSpeed', 90);
+  const MINI_SCV_BASE_DAMAGE = b('miniScv.baseDamage', 4);
+  const MINI_SCV_BASE_MAX_HP = b('miniScv.baseMaxHp', 70);
+  const MINI_SCV_MINE_RATE = b('miniScv.mineRate', 1.05);
+  const MINI_SCV_CARRY_CHUNK_MUL = b('miniScv.carryChunkMul', 0.8);
+
+  const BARRACKS_UPGRADE_COST_BASE = b('barracks.upgradeCostBase', 170);
+  const BARRACKS_UPGRADE_COST_PER_LEVEL = b('barracks.upgradeCostPerLevel', 180);
+  const BARRACKS_LEVELS = b('barracks.levels', [
+    { interval: 30, maxUnits: 4, statMul: 1 },
+    { interval: 22, maxUnits: 6, statMul: 1.28 },
+    { interval: 16, maxUnits: 8, statMul: 1.62 },
+  ]);
+  const SOLDIER_BASE_SPEED = b('barracks.soldier.baseSpeed', 92);
+  const SOLDIER_SPEED_PER_LEVEL = b('barracks.soldier.speedPerLevel', 5);
+  const SOLDIER_SPEED_STAT_FACTOR = b('barracks.soldier.speedStatMulFactor', 2);
+  const SOLDIER_BASE_DAMAGE = b('barracks.soldier.baseDamage', 11);
+  const SOLDIER_DAMAGE_PER_LEVEL = b('barracks.soldier.damagePerLevel', 4);
+  const SOLDIER_BASE_MAX_HP = b('barracks.soldier.baseMaxHp', 80);
+  const SOLDIER_HP_PER_LEVEL = b('barracks.soldier.hpPerLevel', 30);
+  const SOLDIER_BASE_RANGE = b('barracks.soldier.baseRange', 140);
+  const SOLDIER_RANGE_PER_LEVEL = b('barracks.soldier.rangePerLevel', 20);
+  const SOLDIER_SHOOT_CD = b('barracks.soldier.shootCooldown', 0.62);
+
+  const UPGRADE_ATTACK_GAIN = b('upgrades.attack.gainPerLevel', 0.12);
+  const UPGRADE_DEFENSE_GAIN = b('upgrades.defense.gainPerLevel', 1);
+  const UPGRADE_HP_GAIN = b('upgrades.hp.gainPerLevel', 0.15);
+  const UPGRADE_SPEED_GAIN = b('upgrades.speed.gainPerLevel', 0.1);
+  const UPGRADE_COST_SCALE = b('upgrades.costScale', 1.5);
+
+  const CARD_TOWER_RANGE = b('cards.towerRange', 0.1);
+  const CARD_SCV_MINE_SPEED = b('cards.scvMineSpeed', 0.2);
+  const CARD_BARRACKS_RATE = b('cards.barracksRate', 0.18);
+  const CARD_TURRET_DAMAGE = b('cards.turretDamage', 0.2);
+  const CARD_WALL_HP = b('cards.wallHp', 0.3);
+  const CARD_SUPPLY_BONUS = b('cards.supplyBonus', 4);
+  const CARD_MINERAL_RAIN = b('cards.mineralRain', 220);
+  const CARD_BASE_REPAIR = b('cards.baseRepairRatio', 0.3);
+
+  const ENEMY_SCALE_PER_WAVE = b('enemies.scale.perWave', 0.2);
+  const ENEMY_SCALE_EASE_BASE = b('enemies.scale.easeBase', 0.58);
+  const ENEMY_SCALE_EASE_WEIGHT = b('enemies.scale.easeWeight', 0.42);
+
+  const ENEMY_RANGED_START = b('enemies.composition.rangedStartWave', 4);
+  const ENEMY_RANGED_CHANCE_BASE = b('enemies.composition.rangedChanceBase', 0.62);
+  const ENEMY_RANGED_CHANCE_GROW = b('enemies.composition.rangedChanceGrowthPerWave', 0.02);
+  const ENEMY_RANGED_CHANCE_CAP = b('enemies.composition.rangedChanceCap', 0.76);
+  const ENEMY_CHARGER_START = b('enemies.composition.chargerStartWave', 8);
+  const ENEMY_CHARGER_CHANCE_BASE = b('enemies.composition.chargerChanceBase', 0.26);
+  const ENEMY_CHARGER_CHANCE_GROW = b('enemies.composition.chargerChanceGrowthPerWave', 0.02);
+  const ENEMY_CHARGER_CHANCE_CAP = b('enemies.composition.chargerChanceCap', 0.4);
+
+  const WAVE_SPAWN_TOTAL_BASE = b('waves.spawnTotalBase', 16);
+  const WAVE_SPAWN_TOTAL_PER_WAVE = b('waves.spawnTotalPerWave', 5.4);
+  const WAVE_SPAWN_TOTAL_MIN = b('waves.spawnTotalMin', 8);
+  const WAVE_SPAWN_INTERVAL_BASE = b('waves.spawnIntervalBase', 0.72);
+  const WAVE_SPAWN_INTERVAL_PER_WAVE = b('waves.spawnIntervalPerWave', 0.012);
+  const WAVE_SPAWN_INTERVAL_MIN = b('waves.spawnIntervalMin', 0.13);
+  const WAVE_SPAWN_INTERVAL_FLOOR = b('waves.spawnIntervalFloor', 0.15);
+  const WAVE_SPAWN_INTERVAL_EASE_PENALTY = b('waves.spawnIntervalEasePenalty', 1.15);
+  const WAVE_SPAWN_BURST_BASE = b('waves.spawnBurstBase', 2);
+  const WAVE_SPAWN_BURST_STEP_WAVE = b('waves.spawnBurstStepWave', 5);
+  const WAVE_SPAWN_BURST_MAX = b('waves.spawnBurstMax', 6);
+  const WAVE_SPAWN_BURST_EASE_BASE = b('waves.spawnBurstEaseBase', 0.55);
+  const WAVE_SPAWN_BURST_EASE_WEIGHT = b('waves.spawnBurstEaseWeight', 0.45);
+  const WAVE_SPAWN_FIRST_BURST = b('waves.firstWaveBurst', 1);
+  const WAVE_SPAWN_INITIAL_COOLDOWN = b('waves.spawnInitialCooldown', 0.18);
+  const WAVE_COMBAT_DURATION_BASE = b('waves.combatDurationBase', 56);
+  const WAVE_COMBAT_DURATION_PER_WAVE = b('waves.combatDurationPerWave', 1.8);
+  const WAVE_COMBAT_DURATION_BONUS_CAP = b('waves.combatDurationBonusCap', 40);
+  const WAVE_BUILD_DURATION_BASE = b('waves.buildDurationBase', 18);
+  const WAVE_BUILD_DURATION_PER_WAVE = b('waves.buildDurationPerWave', 0.18);
+  const WAVE_BUILD_DURATION_MIN = b('waves.buildDurationMin', 8);
+  const FIRST_WAVE_BUILD_DURATION = b('waves.firstWaveBuildDuration', 40);
+  const WAVE_EASE_BY_WAVE = b('waves.easeByWave', [0.4, 0.56, 0.7, 0.8, 0.88, 0.94, 0.97, 0.99]);
+  const WAVE_BUILD_EARLY_BONUS = b('waves.buildEarlyBonusByWave', { 2: 4, 3: 2, 4: 1 });
+
+  const SPECIAL_MINERAL_MIN_DIST = b('specialMineral.minDistanceFromCommand', 560);
+  const SPECIAL_MINERAL_RADIUS_MIN = b('specialMineral.radiusMin', 16);
+  const SPECIAL_MINERAL_TOTAL_MUL = b('specialMineral.totalMultiplier', 2.6);
+  const SPECIAL_MINERAL_TOTAL_BONUS = b('specialMineral.totalBonus', 380);
+  const SPECIAL_MINERAL_CHUNK_MUL = b('specialMineral.chunkMultiplier', 1.9);
+  const SPECIAL_MINERAL_CHUNK_BONUS = b('specialMineral.chunkBonus', 18);
+  const SPECIAL_MINERAL_DIFF_MUL = b('specialMineral.difficultyMultiplier', 1.3);
+  const SPECIAL_MINERAL_COLOR = b('specialMineral.color', '#7bf4ff');
+  const SPECIAL_MINERAL_FLASH_COLOR = b('specialMineral.flashColor', '#f3feff');
+  const SPECIAL_MINERAL_MINIMAP_COLOR = b('specialMineral.minimapColor', '#6fe9ff');
+  const NORMAL_MINERAL_COLOR = b('specialMineral.normalColor', '#ffd76a');
+  const NORMAL_MINERAL_FLASH_COLOR = b('specialMineral.normalFlashColor', '#fff8cc');
+  const NORMAL_MINERAL_MINIMAP_COLOR = b('specialMineral.normalMinimapColor', '#f7dc6d');
+
+  const ENEMY_TYPES = b('enemies.types', {
+    grunt: { hp: 92, speed: 64, damage: 20, attackRange: 18, shootRange: 0 },
+    ranged: { hp: 74, speed: 60, damage: 18, attackRange: 28, shootRange: 195 },
+    charger: { hp: 118, speed: 84, damage: 27, attackRange: 18, shootRange: 0 },
+    boss: { hp: 1350, speed: 56, damage: 42, attackRange: 28, shootRange: 250 },
+  });
+
+  const BARRACKS_MAX_LEVEL = Math.max(1, Array.isArray(BARRACKS_LEVELS) ? BARRACKS_LEVELS.length : 3);
   const LOBBY_NICK_KEY = 'mineral-survivor:nickname';
   const PLAYER_ID_MIN_LEN = 2;
   const PLAYER_ID_MAX_LEN = 16;
@@ -93,12 +223,54 @@
   let nextUnitId = 1;
 
   const BUILD_TYPES = {
-    command: { name: '커맨드 센터', cost: 360, w: 2, h: 2, hp: 3200, color: '#53f18a' },
-    barracks: { name: '병영', cost: 130, w: 1, h: 1, hp: 760, color: '#66b8ff' },
-    turret: { name: '방어 타워', cost: 120, w: 1, h: 1, hp: 620, color: '#ffc85b' },
-    wall: { name: '성벽', cost: 50, w: 1, h: 1, hp: 1500, color: '#9daab6' },
-    supply: { name: '인구 증가 타워', cost: 115, w: 1, h: 1, hp: 540, color: '#88ffde' },
-    upgrade: { name: '업그레이드 타워', cost: 170, w: 1, h: 1, hp: 520, color: '#d487ff' },
+    command: {
+      name: '커맨드 센터',
+      cost: b('buildings.defs.command.cost', 360),
+      w: b('buildings.defs.command.w', 2),
+      h: b('buildings.defs.command.h', 2),
+      hp: b('buildings.defs.command.hp', 3200),
+      color: b('buildings.defs.command.color', '#53f18a'),
+    },
+    barracks: {
+      name: '병영',
+      cost: b('buildings.defs.barracks.cost', 130),
+      w: b('buildings.defs.barracks.w', 1),
+      h: b('buildings.defs.barracks.h', 1),
+      hp: b('buildings.defs.barracks.hp', 760),
+      color: b('buildings.defs.barracks.color', '#66b8ff'),
+    },
+    turret: {
+      name: '방어 타워',
+      cost: b('buildings.defs.turret.cost', 120),
+      w: b('buildings.defs.turret.w', 1),
+      h: b('buildings.defs.turret.h', 1),
+      hp: b('buildings.defs.turret.hp', 620),
+      color: b('buildings.defs.turret.color', '#ffc85b'),
+    },
+    wall: {
+      name: '성벽',
+      cost: b('buildings.defs.wall.cost', 50),
+      w: b('buildings.defs.wall.w', 1),
+      h: b('buildings.defs.wall.h', 1),
+      hp: b('buildings.defs.wall.hp', 1500),
+      color: b('buildings.defs.wall.color', '#9daab6'),
+    },
+    supply: {
+      name: '인구 증가 타워',
+      cost: b('buildings.defs.supply.cost', 115),
+      w: b('buildings.defs.supply.w', 1),
+      h: b('buildings.defs.supply.h', 1),
+      hp: b('buildings.defs.supply.hp', 540),
+      color: b('buildings.defs.supply.color', '#88ffde'),
+    },
+    upgrade: {
+      name: '업그레이드 타워',
+      cost: b('buildings.defs.upgrade.cost', 170),
+      w: b('buildings.defs.upgrade.w', 1),
+      h: b('buildings.defs.upgrade.h', 1),
+      hp: b('buildings.defs.upgrade.hp', 520),
+      color: b('buildings.defs.upgrade.color', '#d487ff'),
+    },
   };
 
   const SLOT_TO_BUILD = {
@@ -114,26 +286,26 @@
     {
       key: 'attack',
       name: '공격력',
-      desc: '모든 아군 유닛 공격력 +12%',
-      baseCost: 130,
+      desc: `모든 아군 유닛 공격력 +${Math.round(UPGRADE_ATTACK_GAIN * 100)}%`,
+      baseCost: b('upgrades.attack.baseCost', 130),
     },
     {
       key: 'defense',
       name: '방어력',
-      desc: '모든 아군 유닛 방어력 +1',
-      baseCost: 120,
+      desc: `모든 아군 유닛 방어력 +${UPGRADE_DEFENSE_GAIN}`,
+      baseCost: b('upgrades.defense.baseCost', 120),
     },
     {
       key: 'hp',
       name: '최대 체력',
-      desc: '모든 아군 유닛 최대 체력 +15%',
-      baseCost: 140,
+      desc: `모든 아군 유닛 최대 체력 +${Math.round(UPGRADE_HP_GAIN * 100)}%`,
+      baseCost: b('upgrades.hp.baseCost', 140),
     },
     {
       key: 'speed',
       name: '이동속도',
-      desc: '모든 아군 유닛 이동속도 +10%',
-      baseCost: 110,
+      desc: `모든 아군 유닛 이동속도 +${Math.round(UPGRADE_SPEED_GAIN * 100)}%`,
+      baseCost: b('upgrades.speed.baseCost', 110),
     },
   ];
 
@@ -141,17 +313,17 @@
     {
       id: 'tower_range',
       title: '정밀 포탑',
-      desc: '타워 사거리 +10%',
+      desc: `타워 사거리 +${Math.round(CARD_TOWER_RANGE * 100)}%`,
       apply: () => {
-        state.bonuses.towerRange += 0.1;
+        state.bonuses.towerRange += CARD_TOWER_RANGE;
       },
     },
     {
       id: 'scv_mining',
       title: '채굴 알고리즘',
-      desc: 'SCV 채굴 속도 +20%',
+      desc: `SCV 채굴 속도 +${Math.round(CARD_SCV_MINE_SPEED * 100)}%`,
       apply: () => {
-        state.bonuses.mineSpeed += 0.2;
+        state.bonuses.mineSpeed += CARD_SCV_MINE_SPEED;
       },
     },
     {
@@ -165,52 +337,52 @@
     {
       id: 'rapid_train',
       title: '병영 자동화',
-      desc: '병영 생산 속도 +18%',
+      desc: `병영 생산 속도 +${Math.round(CARD_BARRACKS_RATE * 100)}%`,
       apply: () => {
-        state.bonuses.barracksRate += 0.18;
+        state.bonuses.barracksRate += CARD_BARRACKS_RATE;
       },
     },
     {
       id: 'turret_damage',
       title: '과충전 탄환',
-      desc: '타워 공격력 +20%',
+      desc: `타워 공격력 +${Math.round(CARD_TURRET_DAMAGE * 100)}%`,
       apply: () => {
-        state.bonuses.turretDamage += 0.2;
+        state.bonuses.turretDamage += CARD_TURRET_DAMAGE;
       },
     },
     {
       id: 'wall_fortify',
       title: '강화 합금',
-      desc: '성벽 최대 체력 +30%',
+      desc: `성벽 최대 체력 +${Math.round(CARD_WALL_HP * 100)}%`,
       apply: () => {
-        state.bonuses.wallHp += 0.3;
+        state.bonuses.wallHp += CARD_WALL_HP;
         refreshWallHp();
       },
     },
     {
       id: 'supply_drop',
       title: '인구 보너스',
-      desc: '최대 인구 +4',
+      desc: `최대 인구 +${CARD_SUPPLY_BONUS}`,
       apply: () => {
-        state.extraPop += 4;
+        state.extraPop += CARD_SUPPLY_BONUS;
         recalcPopulationLimit();
       },
     },
     {
       id: 'mineral_rain',
       title: '미네랄 보급',
-      desc: '즉시 미네랄 +220',
+      desc: `즉시 미네랄 +${CARD_MINERAL_RAIN}`,
       apply: () => {
-        gainResources(220);
+        gainResources(CARD_MINERAL_RAIN);
       },
     },
     {
       id: 'base_repair',
       title: '기지 복구',
-      desc: '커맨드 센터 체력 30% 회복',
+      desc: `커맨드 센터 체력 ${Math.round(CARD_BASE_REPAIR * 100)}% 회복`,
       apply: () => {
         if (!state.commandCenter) return;
-        const add = state.commandCenter.maxHp * 0.3;
+        const add = state.commandCenter.maxHp * CARD_BASE_REPAIR;
         state.commandCenter.hp = clamp(state.commandCenter.hp + add, 0, state.commandCenter.maxHp);
       },
     },
@@ -222,10 +394,10 @@
     miniW: 220,
     miniH: 160,
 
-    resources: 320,
+    resources: START_RESOURCES,
     wave: 1,
     phase: PHASE_BUILD,
-    phaseTimer: 40,
+    phaseTimer: FIRST_WAVE_BUILD_DURATION,
     waveSpawnTotal: 0,
     waveSpawnRemain: 0,
     spawnCooldown: 0,
@@ -240,6 +412,7 @@
     playerId: '',
     serverRanking: [],
     startPending: false,
+    offlineMode: window.location.protocol === 'file:',
 
     buildMode: null,
     cardOptions: [],
@@ -261,7 +434,7 @@
     },
 
     extraPop: 0,
-    populationLimit: 10,
+    populationLimit: BASE_POPULATION,
 
     pointer: {
       inside: false,
@@ -299,13 +472,13 @@
       x: 0,
       y: 0,
       r: 11,
-      baseSpeed: 185,
-      baseDamage: 14,
-      baseDefense: 1,
-      baseMaxHp: 240,
-      defense: 1,
-      maxHp: 240,
-      hp: 240,
+      baseSpeed: PLAYER_BASE_SPEED,
+      baseDamage: PLAYER_BASE_DAMAGE,
+      baseDefense: PLAYER_BASE_DEFENSE,
+      baseMaxHp: PLAYER_BASE_MAX_HP,
+      defense: PLAYER_BASE_DEFENSE,
+      maxHp: PLAYER_BASE_MAX_HP,
+      hp: PLAYER_BASE_MAX_HP,
       facingAngle: 0,
       flash: 0,
       mineTargetId: 0,
@@ -411,8 +584,37 @@
     return data || {};
   }
 
+  function setOfflineMode(reason = '') {
+    if (state.offlineMode) return;
+    state.offlineMode = true;
+    state.serverRanking = [];
+    if (reason) {
+      showToast(`오프라인 모드 전환: ${reason}`, 1.6);
+    } else {
+      showToast('오프라인 모드로 전환되었습니다', 1.6);
+    }
+  }
+
+  function isNetworkError(err) {
+    if (!err) return false;
+    if (err.code === 'OFFLINE_MODE') return true;
+    if (err.name === 'TypeError') return true;
+    if (typeof err.message === 'string' && /fetch|network|failed/i.test(err.message)) return true;
+    return false;
+  }
+
   function renderLobbyRanking() {
     if (!rankingBodyEl || !bestRecordSummaryEl) return;
+
+    if (state.offlineMode) {
+      rankingBodyEl.innerHTML = '';
+      const tr = document.createElement('tr');
+      tr.innerHTML = '<td colspan="6">오프라인 모드: 랭킹 저장/조회가 비활성화됩니다.</td>';
+      rankingBodyEl.appendChild(tr);
+      bestRecordSummaryEl.textContent = '오프라인 모드 (기록 저장 안 됨)';
+      return;
+    }
+
     const list = sortRanking((state.serverRanking || []).slice());
 
     rankingBodyEl.innerHTML = '';
@@ -445,6 +647,10 @@
 
   async function fetchRankingFromServer() {
     if (!rankingBodyEl || !bestRecordSummaryEl) return;
+    if (state.offlineMode) {
+      renderLobbyRanking();
+      return;
+    }
     bestRecordSummaryEl.textContent = '랭킹 불러오는 중...';
     rankingBodyEl.innerHTML = '<tr><td colspan="6">서버에서 랭킹을 불러오는 중...</td></tr>';
     try {
@@ -452,9 +658,14 @@
       state.serverRanking = Array.isArray(data.rankings) ? data.rankings : [];
       renderLobbyRanking();
     } catch (err) {
-      state.serverRanking = [];
-      rankingBodyEl.innerHTML = '<tr><td colspan="6">서버 연결 실패</td></tr>';
-      bestRecordSummaryEl.textContent = '최고기록: -';
+      if (isNetworkError(err)) {
+        setOfflineMode('서버 연결 실패');
+        renderLobbyRanking();
+      } else {
+        state.serverRanking = [];
+        rankingBodyEl.innerHTML = '<tr><td colspan="6">서버 연결 실패</td></tr>';
+        bestRecordSummaryEl.textContent = '최고기록: -';
+      }
     }
   }
 
@@ -492,6 +703,11 @@
     if (state.recordSaved) return;
     state.recordSaved = true;
 
+    if (state.offlineMode) {
+      showToast('오프라인 모드: 기록 저장 없이 진행됩니다', 1.5);
+      return;
+    }
+
     const waveReached = Math.max(1, state.wave);
     const record = {
       playerId: state.playerId || getNickname(),
@@ -504,7 +720,7 @@
     submitScoreToServer(record)
       .then(() => fetchRankingFromServer())
       .catch(() => {
-        showToast('랭킹 서버 저장 실패', 1.2);
+        setOfflineMode('서버 저장 실패');
       });
   }
 
@@ -531,6 +747,7 @@
       startGameButton.disabled = false;
       startGameButton.textContent = '게임 시작';
     }
+    renderLobbyRanking();
     fetchRankingFromServer();
   }
 
@@ -560,20 +777,32 @@
       startGameButton.textContent = '확인 중...';
     }
 
-    try {
-      await registerPlayerId(nickname);
-    } catch (err) {
-      if (err.code === 'ID_EXISTS') {
-        showToast('이미 존재하는 아이디입니다. 다른 아이디를 입력하세요.', 1.8);
-      } else {
-        showToast('서버에 연결할 수 없습니다', 1.6);
+    if (!state.offlineMode) {
+      try {
+        await registerPlayerId(nickname);
+      } catch (err) {
+        if (err.code === 'ID_EXISTS') {
+          showToast('이미 존재하는 아이디입니다. 다른 아이디를 입력하세요.', 1.8);
+          state.startPending = false;
+          if (startGameButton) {
+            startGameButton.disabled = false;
+            startGameButton.textContent = '게임 시작';
+          }
+          return;
+        }
+
+        if (isNetworkError(err)) {
+          setOfflineMode('연결 실패');
+        } else {
+          showToast('서버에 연결할 수 없습니다', 1.6);
+          state.startPending = false;
+          if (startGameButton) {
+            startGameButton.disabled = false;
+            startGameButton.textContent = '게임 시작';
+          }
+          return;
+        }
       }
-      state.startPending = false;
-      if (startGameButton) {
-        startGameButton.disabled = false;
-        startGameButton.textContent = '게임 시작';
-      }
-      return;
     }
 
     saveNickname(nickname);
@@ -804,9 +1033,42 @@
         chunk,
         difficulty,
         flash: 0,
+        special: false,
       });
       created += 1;
     }
+  }
+
+  function markSpecialMineralChunk(commandCenter) {
+    if (!commandCenter || minerals.length === 0) return;
+
+    for (let i = 0; i < minerals.length; i += 1) {
+      minerals[i].special = false;
+    }
+
+    const cp = getBuildingCenter(commandCenter);
+    const minDist2 = SPECIAL_MINERAL_MIN_DIST * SPECIAL_MINERAL_MIN_DIST;
+    const farCandidates = [];
+    for (let i = 0; i < minerals.length; i += 1) {
+      const m = minerals[i];
+      if (m.total <= 0) continue;
+      if (dist2(m.x, m.y, cp.x, cp.y) >= minDist2) {
+        farCandidates.push(m);
+      }
+    }
+
+    let candidates = farCandidates;
+    if (candidates.length === 0) {
+      candidates = minerals.filter((m) => m.total > 0);
+    }
+    if (candidates.length === 0) return;
+
+    const chosen = candidates[randInt(0, candidates.length - 1)];
+    chosen.special = true;
+    chosen.radius = Math.max(chosen.radius, SPECIAL_MINERAL_RADIUS_MIN);
+    chosen.total = Math.max(1, Math.floor(chosen.total * SPECIAL_MINERAL_TOTAL_MUL + SPECIAL_MINERAL_TOTAL_BONUS));
+    chosen.chunk = Math.max(1, Math.floor(chosen.chunk * SPECIAL_MINERAL_CHUNK_MUL + SPECIAL_MINERAL_CHUNK_BONUS));
+    chosen.difficulty = Math.max(1, chosen.difficulty * SPECIAL_MINERAL_DIFF_MUL);
   }
 
   function addBuilding(type, c, r, level = 1, options = {}) {
@@ -828,7 +1090,7 @@
       defense: 0,
       flash: 0,
       shootCd: randRange(0, 0.4),
-      spawnCd: type === 'barracks' ? 30 : randRange(2, 4),
+      spawnCd: type === 'barracks' ? getBarracksConfig(level).interval : randRange(2, 4),
       hologram: 0,
       isMainCommand: !!options.isMainCommand,
     };
@@ -895,7 +1157,7 @@
     const def = BUILD_TYPES[type];
     if (!def) return 1;
 
-    let hp = def.hp * (1 + (level - 1) * 0.52);
+    let hp = def.hp * (1 + (level - 1) * BUILDING_HP_LEVEL_SCALE);
     if (type === 'wall') {
       hp *= 1 + state.bonuses.wallHp;
     }
@@ -914,7 +1176,7 @@
 
   function recalcPopulationLimit() {
     const supplyCount = buildings.filter((b) => b.type === 'supply').length;
-    state.populationLimit = 10 + state.extraPop + supplyCount * 5;
+    state.populationLimit = BASE_POPULATION + state.extraPop + supplyCount * SUPPLY_POP_BONUS;
   }
 
   function getPopulationUsed() {
@@ -922,19 +1184,19 @@
   }
 
   function getAttackMultiplier() {
-    return 1 + state.upgrades.attack * 0.12;
+    return 1 + state.upgrades.attack * UPGRADE_ATTACK_GAIN;
   }
 
   function getDefenseBonus() {
-    return state.upgrades.defense;
+    return state.upgrades.defense * UPGRADE_DEFENSE_GAIN;
   }
 
   function getHpMultiplier() {
-    return 1 + state.upgrades.hp * 0.15;
+    return 1 + state.upgrades.hp * UPGRADE_HP_GAIN;
   }
 
   function getSpeedMultiplier() {
-    return 1 + state.upgrades.speed * 0.1;
+    return 1 + state.upgrades.speed * UPGRADE_SPEED_GAIN;
   }
 
   function getMineSpeedMultiplier() {
@@ -942,49 +1204,42 @@
   }
 
   function getWaveEaseMultiplier(wave) {
-    if (wave <= 1) return 0.4;
-    if (wave === 2) return 0.56;
-    if (wave === 3) return 0.7;
-    if (wave === 4) return 0.8;
-    if (wave === 5) return 0.88;
-    if (wave === 6) return 0.94;
-    if (wave === 7) return 0.97;
-    if (wave === 8) return 0.99;
-    return 1;
+    if (!Array.isArray(WAVE_EASE_BY_WAVE) || WAVE_EASE_BY_WAVE.length === 0) return 1;
+    const index = clamp(wave - 1, 0, WAVE_EASE_BY_WAVE.length - 1);
+    if (wave - 1 >= WAVE_EASE_BY_WAVE.length) return 1;
+    return Number(WAVE_EASE_BY_WAVE[index]) || 1;
   }
 
   function getWaveBuildDuration(wave) {
-    if (wave <= 1) return 40;
-    const base = Math.max(8, 18 - wave * 0.18);
-    if (wave === 2) return base + 4;
-    if (wave === 3) return base + 2;
-    if (wave === 4) return base + 1;
-    return base;
+    if (wave <= 1) return FIRST_WAVE_BUILD_DURATION;
+    const base = Math.max(WAVE_BUILD_DURATION_MIN, WAVE_BUILD_DURATION_BASE - wave * WAVE_BUILD_DURATION_PER_WAVE);
+    const bonus = Number(WAVE_BUILD_EARLY_BONUS[String(wave)] || 0);
+    return base + bonus;
   }
 
   function getWaveEnemyStatScale(wave) {
     const ease = getWaveEaseMultiplier(wave);
-    return 1 + wave * 0.2 * (0.58 + ease * 0.42);
+    return 1 + wave * ENEMY_SCALE_PER_WAVE * (ENEMY_SCALE_EASE_BASE + ease * ENEMY_SCALE_EASE_WEIGHT);
   }
 
   function getWaveSpawnConfig(wave) {
     const ease = getWaveEaseMultiplier(wave);
-    const baseTotal = Math.floor(16 + wave * 5.4);
-    const baseInterval = Math.max(0.13, 0.72 - wave * 0.012);
-    const baseBurst = Math.min(6, 2 + Math.floor(wave / 5));
+    const baseTotal = Math.floor(WAVE_SPAWN_TOTAL_BASE + wave * WAVE_SPAWN_TOTAL_PER_WAVE);
+    const baseInterval = Math.max(WAVE_SPAWN_INTERVAL_MIN, WAVE_SPAWN_INTERVAL_BASE - wave * WAVE_SPAWN_INTERVAL_PER_WAVE);
+    const baseBurst = Math.min(WAVE_SPAWN_BURST_MAX, WAVE_SPAWN_BURST_BASE + Math.floor(wave / WAVE_SPAWN_BURST_STEP_WAVE));
 
-    const total = Math.max(8, Math.floor(baseTotal * ease));
-    const interval = Math.max(0.15, baseInterval * (1 + (1 - ease) * 1.15));
+    const total = Math.max(WAVE_SPAWN_TOTAL_MIN, Math.floor(baseTotal * ease));
+    const interval = Math.max(WAVE_SPAWN_INTERVAL_FLOOR, baseInterval * (1 + (1 - ease) * WAVE_SPAWN_INTERVAL_EASE_PENALTY));
 
-    let burst = Math.max(1, Math.round(baseBurst * (0.55 + ease * 0.45)));
+    let burst = Math.max(1, Math.round(baseBurst * (WAVE_SPAWN_BURST_EASE_BASE + ease * WAVE_SPAWN_BURST_EASE_WEIGHT)));
     burst = Math.min(baseBurst, burst);
-    if (wave === 1) burst = 1;
+    if (wave === 1) burst = WAVE_SPAWN_FIRST_BURST;
 
     return {
       total,
       interval,
       burst,
-      combatDuration: 56 + Math.min(40, wave * 1.8),
+      combatDuration: WAVE_COMBAT_DURATION_BASE + Math.min(WAVE_COMBAT_DURATION_BONUS_CAP, wave * WAVE_COMBAT_DURATION_PER_WAVE),
     };
   }
 
@@ -1182,7 +1437,7 @@
     nextEnemyId = 1;
     nextUnitId = 1;
 
-    state.resources = 320;
+    state.resources = START_RESOURCES;
     state.wave = 1;
     state.runTime = 0;
     state.killCount = 0;
@@ -1212,7 +1467,7 @@
     state.bonuses.wallHp = 0;
 
     state.extraPop = 0;
-    state.populationLimit = 10;
+    state.populationLimit = BASE_POPULATION;
 
     state.toastTimer = 0;
     toastEl.classList.remove('show');
@@ -1226,13 +1481,13 @@
 
     state.commandCenter = null;
 
-    state.player.baseSpeed = 185;
-    state.player.baseDamage = 14;
-    state.player.baseDefense = 1;
-    state.player.baseMaxHp = 240;
-    state.player.maxHp = 240;
-    state.player.hp = 240;
-    state.player.defense = 1;
+    state.player.baseSpeed = PLAYER_BASE_SPEED;
+    state.player.baseDamage = PLAYER_BASE_DAMAGE;
+    state.player.baseDefense = PLAYER_BASE_DEFENSE;
+    state.player.baseMaxHp = PLAYER_BASE_MAX_HP;
+    state.player.maxHp = PLAYER_BASE_MAX_HP;
+    state.player.hp = PLAYER_BASE_MAX_HP;
+    state.player.defense = PLAYER_BASE_DEFENSE;
     state.player.flash = 0;
     state.player.mineTargetId = 0;
     state.player.mineProgress = 0;
@@ -1246,6 +1501,7 @@
     const midR = Math.floor(MAP_ROWS / 2) - 1;
 
     addBuilding('command', midC, midR, 1, { isMainCommand: true });
+    markSpecialMineralChunk(state.commandCenter);
     state.player.x = tileCenterX(midC + 1);
     state.player.y = tileCenterY(midR + 3);
 
@@ -1684,31 +1940,19 @@
     }
 
     const norm = getWaveEnemyStatScale(wave);
+    const typeDef = ENEMY_TYPES[type] || ENEMY_TYPES.grunt || {
+      hp: 92,
+      speed: 64,
+      damage: 20,
+      attackRange: 18,
+      shootRange: 0,
+    };
 
-    let baseHp = 92;
-    let baseSpeed = 64;
-    let baseDamage = 20;
-    let attackRange = 18;
-    let shootRange = 0;
-
-    if (type === 'ranged') {
-      baseHp = 74;
-      baseSpeed = 60;
-      baseDamage = 18;
-      shootRange = 195;
-      attackRange = 28;
-    } else if (type === 'charger') {
-      baseHp = 118;
-      baseSpeed = 84;
-      baseDamage = 27;
-      attackRange = 18;
-    } else if (type === 'boss') {
-      baseHp = 1350;
-      baseSpeed = 56;
-      baseDamage = 42;
-      shootRange = 250;
-      attackRange = 28;
-    }
+    const baseHp = Number(typeDef.hp) || 92;
+    const baseSpeed = Number(typeDef.speed) || 64;
+    const baseDamage = Number(typeDef.damage) || 20;
+    const attackRange = Number(typeDef.attackRange) || 18;
+    const shootRange = Number(typeDef.shootRange) || 0;
 
     const enemy = {
       id: nextEnemyId += 1,
@@ -1745,8 +1989,22 @@
     const w = state.wave;
     const roll = Math.random();
 
-    if (w >= 8 && roll < Math.min(0.4, 0.26 + (w - 8) * 0.02)) return 'charger';
-    if (w >= 4 && roll < Math.min(0.76, 0.62 + (w - 4) * 0.02)) return 'ranged';
+    if (w >= ENEMY_CHARGER_START) {
+      const chargerChance = Math.min(
+        ENEMY_CHARGER_CHANCE_CAP,
+        ENEMY_CHARGER_CHANCE_BASE + (w - ENEMY_CHARGER_START) * ENEMY_CHARGER_CHANCE_GROW,
+      );
+      if (roll < chargerChance) return 'charger';
+    }
+
+    if (w >= ENEMY_RANGED_START) {
+      const rangedChance = Math.min(
+        ENEMY_RANGED_CHANCE_CAP,
+        ENEMY_RANGED_CHANCE_BASE + (w - ENEMY_RANGED_START) * ENEMY_RANGED_CHANCE_GROW,
+      );
+      if (roll < rangedChance) return 'ranged';
+    }
+
     return 'grunt';
   }
 
@@ -1812,10 +2070,10 @@
       const idx = enemies.indexOf(target);
       if (idx >= 0) enemies.splice(idx, 1);
       state.killCount += 1;
-      gainResources(2);
-      addPopup(target.x, target.y - 14, '+2', '#87ff9d');
+      gainResources(ENEMY_KILL_REWARD);
+      addPopup(target.x, target.y - 14, `+${ENEMY_KILL_REWARD}`, '#87ff9d');
       addDebris(target.x, target.y, 12);
-      if (Math.random() < 0.28) {
+      if (Math.random() < ENEMY_DEATH_EXPLODE_CHANCE) {
         playSfx('explode');
       }
       return;
@@ -1838,14 +2096,14 @@
     }
 
     if (target.entityKind === 'player') {
-      state.resources = Math.max(0, state.resources - 60);
+      state.resources = Math.max(0, state.resources - PLAYER_DEATH_PENALTY);
       target.hp = Math.max(1, Math.round(target.maxHp * 0.65));
       if (state.commandCenter) {
         const cc = getBuildingCenter(state.commandCenter);
         target.x = cc.x;
         target.y = cc.y + TILE * 2;
       }
-      showToast('메인 SCV 파괴! 자원 -60', 1.65);
+      showToast(`메인 SCV 파괴! 자원 -${PLAYER_DEATH_PENALTY}`, 1.65);
       playSfx('explode');
       return;
     }
@@ -1970,14 +2228,14 @@
       r: 9,
       level,
       sourceBarracksId: b.id,
-      baseSpeed: 92 + level * 5 + config.statMul * 2,
-      baseDamage: Math.round((11 + level * 4) * config.statMul),
+      baseSpeed: SOLDIER_BASE_SPEED + level * SOLDIER_SPEED_PER_LEVEL + config.statMul * SOLDIER_SPEED_STAT_FACTOR,
+      baseDamage: Math.round((SOLDIER_BASE_DAMAGE + level * SOLDIER_DAMAGE_PER_LEVEL) * config.statMul),
       baseDefense: 0,
-      baseMaxHp: Math.round((80 + level * 30) * config.statMul),
+      baseMaxHp: Math.round((SOLDIER_BASE_MAX_HP + level * SOLDIER_HP_PER_LEVEL) * config.statMul),
       defense: 0,
       maxHp: 1,
       hp: 1,
-      range: 140 + level * 20,
+      range: SOLDIER_BASE_RANGE + level * SOLDIER_RANGE_PER_LEVEL,
       shootCd: randRange(0, 0.4),
       targetId: 0,
       flash: 0,
@@ -1998,17 +2256,20 @@
   }
 
   function getBarracksConfig(level) {
-    if (level <= 1) {
+    if (!Array.isArray(BARRACKS_LEVELS) || BARRACKS_LEVELS.length === 0) {
       return { interval: 30, maxUnits: 4, statMul: 1 };
     }
-    if (level === 2) {
-      return { interval: 22, maxUnits: 6, statMul: 1.28 };
-    }
-    return { interval: 16, maxUnits: 8, statMul: 1.62 };
+
+    const index = clamp(level - 1, 0, BARRACKS_LEVELS.length - 1);
+    const raw = BARRACKS_LEVELS[index] || BARRACKS_LEVELS[0];
+    const interval = Number(raw.interval) || 30;
+    const maxUnits = Math.max(1, Number(raw.maxUnits) || 4);
+    const statMul = Math.max(0.1, Number(raw.statMul) || 1);
+    return { interval, maxUnits, statMul };
   }
 
   function getBarracksUpgradeCost(barracks) {
-    return Math.round(170 + barracks.level * 180);
+    return Math.round(BARRACKS_UPGRADE_COST_BASE + barracks.level * BARRACKS_UPGRADE_COST_PER_LEVEL);
   }
 
   function spawnMiniScv(sourceCommandCenter = null) {
@@ -2028,10 +2289,10 @@
       x: spawnPos.x,
       y: spawnPos.y,
       r: 8,
-      baseSpeed: 90,
-      baseDamage: 4,
+      baseSpeed: MINI_SCV_BASE_SPEED,
+      baseDamage: MINI_SCV_BASE_DAMAGE,
       baseDefense: 0,
-      baseMaxHp: 70,
+      baseMaxHp: MINI_SCV_BASE_MAX_HP,
       defense: 0,
       maxHp: 1,
       hp: 1,
@@ -2210,7 +2471,7 @@
 
   function getBuildUpgradeCost(building) {
     const base = BUILD_TYPES[building.type].cost;
-    return Math.round(base * (1.35 + building.level * 0.75));
+    return Math.round(base * (BUILDING_UPGRADE_COST_BASE + building.level * BUILDING_UPGRADE_COST_PER_LEVEL));
   }
 
   function validateBuildPlacement(type, c, r) {
@@ -2508,7 +2769,7 @@
     for (let i = 0; i < UPGRADE_DEFS.length; i += 1) {
       const up = UPGRADE_DEFS[i];
       const level = state.upgrades[up.key];
-      const cost = Math.floor(up.baseCost * Math.pow(1.5, level));
+      const cost = Math.floor(up.baseCost * Math.pow(UPGRADE_COST_SCALE, level));
 
       const btn = document.createElement('button');
       btn.type = 'button';
@@ -2627,7 +2888,7 @@
         state.waveSpawnTotal = spawnConfig.total;
         state.waveSpawnRemain = state.waveSpawnTotal;
         state.spawnInterval = spawnConfig.interval;
-        state.spawnCooldown = 0.18;
+        state.spawnCooldown = WAVE_SPAWN_INITIAL_COOLDOWN;
         state.spawnBurst = spawnConfig.burst;
         state.phaseTimer = spawnConfig.combatDuration;
         state.bossSpawned = false;
@@ -2700,7 +2961,7 @@
         p.mineProgress = 0;
       }
 
-      p.mineProgress += (dt * 0.75 * getMineSpeedMultiplier()) / mineral.difficulty;
+      p.mineProgress += (dt * PLAYER_MINE_RATE * getMineSpeedMultiplier()) / mineral.difficulty;
 
       if (Math.random() < 0.22) {
         addParticle(mineral.x + randRange(-6, 6), mineral.y + randRange(-6, 6), randRange(-18, 18), randRange(-24, -8), 0.26, 2, '#ffe48b');
@@ -2730,10 +2991,9 @@
     const nearestBuilding = findNearestDamagedBuilding(p.x, p.y, 44);
     if (nearestBuilding && state.resources > 0) {
       const repairAmount = dt * 48;
-      const repairCost = repairAmount * 0.28;
-      const possibleRepair = Math.min(repairAmount, nearestBuilding.maxHp - nearestBuilding.hp, state.resources / 0.28);
+      const possibleRepair = Math.min(repairAmount, nearestBuilding.maxHp - nearestBuilding.hp, state.resources / REPAIR_MINERAL_PER_HP);
       if (possibleRepair > 0) {
-        spendResources(possibleRepair * 0.28);
+        spendResources(possibleRepair * REPAIR_MINERAL_PER_HP);
         nearestBuilding.hp += possibleRepair;
         addParticle(p.x + randRange(-5, 5), p.y + randRange(-5, 5), randRange(-16, 16), randRange(-18, 0), 0.2, 2, '#86f4ff');
       }
@@ -2886,7 +3146,7 @@
         }
 
         scv.facingAngle = Math.atan2(mineral.y - scv.y, mineral.x - scv.x);
-        scv.mineProgress += (dt * 1.05 * getMineSpeedMultiplier()) / mineral.difficulty;
+        scv.mineProgress += (dt * MINI_SCV_MINE_RATE * getMineSpeedMultiplier()) / mineral.difficulty;
 
         if (Math.random() < 0.22) {
           addParticle(mineral.x + randRange(-5, 5), mineral.y + randRange(-5, 5), randRange(-12, 12), randRange(-18, -2), 0.2, 2, '#ffe198');
@@ -2894,7 +3154,7 @@
 
         if (scv.mineProgress >= 1) {
           scv.mineProgress = 0;
-          const gain = Math.min(Math.max(1, Math.floor(mineral.chunk * 0.8)), mineral.total);
+          const gain = Math.min(Math.max(1, Math.floor(mineral.chunk * MINI_SCV_CARRY_CHUNK_MUL)), mineral.total);
           mineral.total -= gain;
           scv.carry = gain;
           scv.mode = 'toBase';
@@ -3005,7 +3265,7 @@
         }
 
         if (d <= s.range && s.shootCd <= 0) {
-          s.shootCd = 0.62;
+          s.shootCd = SOLDIER_SHOOT_CD;
           const damage = Math.round(s.baseDamage * getAttackMultiplier());
           spawnProjectile(s.x, s.y, target.x, target.y, 260, damage, TEAM_FRIENDLY, '#9fd8ff', 3, 1.4);
           playSfx('shot');
@@ -3351,7 +3611,9 @@
       ctx.save();
       ctx.translate(x, y);
       ctx.scale(k, k);
-      ctx.fillStyle = m.flash > 0 ? '#fff8cc' : '#ffd76a';
+      ctx.fillStyle = m.flash > 0
+        ? (m.special ? SPECIAL_MINERAL_FLASH_COLOR : NORMAL_MINERAL_FLASH_COLOR)
+        : (m.special ? SPECIAL_MINERAL_COLOR : NORMAL_MINERAL_COLOR);
       ctx.beginPath();
       ctx.moveTo(0, -m.radius);
       ctx.lineTo(m.radius * 0.8, 0);
@@ -3359,6 +3621,11 @@
       ctx.lineTo(-m.radius * 0.8, 0);
       ctx.closePath();
       ctx.fill();
+      if (m.special) {
+        ctx.strokeStyle = 'rgba(163, 248, 255, 0.9)';
+        ctx.lineWidth = 1.6;
+        ctx.stroke();
+      }
       ctx.restore();
     }
 
@@ -3724,7 +3991,7 @@
       const m = minerals[i];
       if (m.total <= 0) continue;
       if (!discovered[toIndex(m.c, m.r)]) continue;
-      miniCtx.fillStyle = '#f7dc6d';
+      miniCtx.fillStyle = m.special ? SPECIAL_MINERAL_MINIMAP_COLOR : NORMAL_MINERAL_MINIMAP_COLOR;
       miniCtx.fillRect(m.c * sx, m.r * sy, Math.max(1, sx), Math.max(1, sy));
     }
 
