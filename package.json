@@ -1,0 +1,13 @@
+{
+  "name": "mineral-survivor-defense",
+  "version": "1.0.0",
+  "private": true,
+  "type": "commonjs",
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "start": "node server.js",
+    "dev": "HOST=127.0.0.1 PORT=8787 node server.js"
+  }
+}

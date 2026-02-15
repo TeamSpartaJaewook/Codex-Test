@@ -1,0 +1,128 @@
+<!doctype html>
+<html lang="ko">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+    <meta name="api-base" content="" />
+    <title>Mineral Survivor: Defense</title>
+    <link rel="stylesheet" href="style.css" />
+  </head>
+  <body>
+    <div id="app">
+      <header id="topHud">
+        <div class="hudItem"><span class="label">Mineral</span><span id="mineralValue">0</span></div>
+        <div class="hudItem"><span class="label">Population</span><span id="populationValue">0 / 0</span></div>
+        <div class="hudItem"><span class="label">Wave</span><span id="waveValue">1</span></div>
+        <div class="hudItem"><span class="label">Time</span><span id="timeValue">0</span></div>
+      </header>
+
+      <main id="gameRegion">
+        <canvas id="gameCanvas" width="1280" height="720" aria-label="game canvas"></canvas>
+
+        <aside id="rightPanel">
+          <div id="minimapWrap">
+            <div class="panelTitle">MINIMAP</div>
+            <canvas id="minimapCanvas" width="220" height="160"></canvas>
+          </div>
+
+          <button id="upgradeOpenButton" class="sideBtn" type="button">업그레이드 열기</button>
+          <button id="spawnWorkerButton" class="sideBtn" type="button">일꾼 생산 (E)</button>
+          <button id="centerCameraButton" class="sideBtn" type="button">본진으로</button>
+        </aside>
+      </main>
+
+      <footer id="bottomHud">
+        <button class="slotBtn" data-slot="1">1 병영</button>
+        <button class="slotBtn" data-slot="2">2 타워</button>
+        <button class="slotBtn" data-slot="3">3 성벽</button>
+        <button class="slotBtn" data-slot="4">4 보급</button>
+        <button class="slotBtn" data-slot="5">5 업그레이드</button>
+        <button class="slotBtn" data-slot="6">6 커맨드</button>
+      </footer>
+
+      <div id="toast"></div>
+
+      <div id="waveBanner" class="overlayBanner hidden"></div>
+
+      <section id="cardOverlay" class="overlay hidden" aria-hidden="true">
+        <div class="overlayPanel">
+          <h2>웨이브 보상 선택</h2>
+          <p>1~3 키, 클릭, 또는 스페이스로 선택</p>
+          <div id="cardList" class="cardList"></div>
+        </div>
+      </section>
+
+      <section id="upgradeOverlay" class="overlay hidden" aria-hidden="true">
+        <div class="overlayPanel">
+          <h2>업그레이드 타워</h2>
+          <p>미네랄을 사용해 영구 강화합니다.</p>
+          <div id="upgradeList" class="upgradeList"></div>
+          <button id="upgradeCloseButton" class="closeBtn" type="button">닫기</button>
+        </div>
+      </section>
+
+      <section id="barracksOverlay" class="overlay hidden" aria-hidden="true">
+        <div class="overlayPanel">
+          <h2>병영 관리</h2>
+          <p id="barracksInfo"></p>
+          <button id="barracksUpgradeButton" class="upgradeBtn" type="button">병영 업그레이드</button>
+          <button id="barracksCloseButton" class="closeBtn" type="button">닫기</button>
+        </div>
+      </section>
+
+      <section id="lobbyOverlay" class="overlay" aria-hidden="false">
+        <div class="overlayPanel lobbyPanel">
+          <h2>Mineral Survivor: Defense</h2>
+          <p>아이디를 입력하고 시작하세요. (중복 아이디는 시작 불가)</p>
+          <div class="lobbyRow">
+            <input id="nicknameInput" class="lobbyInput" type="text" maxlength="16" placeholder="아이디" />
+            <button id="startGameButton" class="sideBtn" type="button">게임 시작</button>
+          </div>
+          <div id="bestRecordSummary" class="bestSummary">최고기록: -</div>
+          <div class="rankingWrap">
+            <div class="panelTitle">RANKING (SERVER)</div>
+            <table id="rankingTable" class="rankingTable">
+              <thead>
+                <tr>
+                  <th>#</th>
+                  <th>아이디</th>
+                  <th>시간</th>
+                  <th>웨이브</th>
+                  <th>처치</th>
+                  <th>획득 자원</th>
+                </tr>
+              </thead>
+              <tbody id="rankingBody"></tbody>
+            </table>
+          </div>
+        </div>
+      </section>
+
+      <section id="gameOverOverlay" class="overlay hidden" aria-hidden="true">
+        <div class="overlayPanel">
+          <h2>게임 오버</h2>
+          <p>커맨드 센터가 파괴되었습니다.</p>
+          <button id="restartButton" class="closeBtn" type="button">다시 시작</button>
+        </div>
+      </section>
+
+      <div id="mobileControls">
+        <div id="joystickZone">
+          <div id="joystickBase">
+            <div id="joystickKnob"></div>
+          </div>
+        </div>
+        <div id="mobileActionButtons">
+          <button class="mobileAction" data-slot="1">1</button>
+          <button class="mobileAction" data-slot="2">2</button>
+          <button class="mobileAction" data-slot="3">3</button>
+          <button class="mobileAction" data-slot="4">4</button>
+          <button class="mobileAction" data-slot="5">5</button>
+          <button class="mobileAction" data-slot="6">6</button>
+        </div>
+      </div>
+    </div>
+
+    <script src="main.js"></script>
+  </body>
+</html>
