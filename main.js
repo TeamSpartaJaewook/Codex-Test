@@ -941,6 +941,53 @@
     return 1 + state.bonuses.mineSpeed;
   }
 
+  function getWaveEaseMultiplier(wave) {
+    if (wave <= 1) return 0.4;
+    if (wave === 2) return 0.56;
+    if (wave === 3) return 0.7;
+    if (wave === 4) return 0.8;
+    if (wave === 5) return 0.88;
+    if (wave === 6) return 0.94;
+    if (wave === 7) return 0.97;
+    if (wave === 8) return 0.99;
+    return 1;
+  }
+
+  function getWaveBuildDuration(wave) {
+    if (wave <= 1) return 40;
+    const base = Math.max(8, 18 - wave * 0.18);
+    if (wave === 2) return base + 4;
+    if (wave === 3) return base + 2;
+    if (wave === 4) return base + 1;
+    return base;
+  }
+
+  function getWaveEnemyStatScale(wave) {
+    const ease = getWaveEaseMultiplier(wave);
+    return 1 + wave * 0.2 * (0.58 + ease * 0.42);
+  }
+
+  function getWaveSpawnConfig(wave) {
+    const ease = getWaveEaseMultiplier(wave);
+    const baseTotal = Math.floor(16 + wave * 5.4);
+    const baseInterval = Math.max(0.13, 0.72 - wave * 0.012);
+    const baseBurst = Math.min(6, 2 + Math.floor(wave / 5));
+
+    const total = Math.max(8, Math.floor(baseTotal * ease));
+    const interval = Math.max(0.15, baseInterval * (1 + (1 - ease) * 1.15));
+
+    let burst = Math.max(1, Math.round(baseBurst * (0.55 + ease * 0.45)));
+    burst = Math.min(baseBurst, burst);
+    if (wave === 1) burst = 1;
+
+    return {
+      total,
+      interval,
+      burst,
+      combatDuration: 56 + Math.min(40, wave * 1.8),
+    };
+  }
+
   function refreshFriendlyDerivedStats() {
     state.player.maxHp = Math.round(state.player.baseMaxHp * getHpMultiplier());
     state.player.hp = clamp(state.player.hp, 1, state.player.maxHp);
@@ -1142,7 +1189,7 @@
     state.totalMineralsEarned = 0;
     state.recordSaved = false;
     state.phase = PHASE_BUILD;
-    state.phaseTimer = 40;
+    state.phaseTimer = getWaveBuildDuration(1);
     state.waveSpawnRemain = 0;
     state.waveSpawnTotal = 0;
     state.spawnCooldown = 0;
@@ -1636,7 +1683,7 @@
       }
     }
 
-    const norm = 1 + wave * 0.2;
+    const norm = getWaveEnemyStatScale(wave);
 
     let baseHp = 92;
     let baseSpeed = 64;
@@ -1698,8 +1745,8 @@
     const w = state.wave;
     const roll = Math.random();
 
-    if (w >= 7 && roll < 0.4) return 'charger';
-    if (w >= 3 && roll < 0.76) return 'ranged';
+    if (w >= 8 && roll < Math.min(0.4, 0.26 + (w - 8) * 0.02)) return 'charger';
+    if (w >= 4 && roll < Math.min(0.76, 0.62 + (w - 4) * 0.02)) return 'ranged';
     return 'grunt';
   }
 
@@ -2535,7 +2582,7 @@
 
     state.wave += 1;
     state.phase = PHASE_BUILD;
-    state.phaseTimer = Math.max(8, 18 - state.wave * 0.18);
+    state.phaseTimer = getWaveBuildDuration(state.wave);
 
     showBanner(`WAVE ${state.wave} 준비`, 1.6);
     updateHud();
@@ -2576,12 +2623,13 @@
       state.phaseTimer -= dt;
       if (state.phaseTimer <= 0) {
         state.phase = PHASE_COMBAT;
-        state.waveSpawnTotal = Math.floor(16 + state.wave * 5.4);
+        const spawnConfig = getWaveSpawnConfig(state.wave);
+        state.waveSpawnTotal = spawnConfig.total;
         state.waveSpawnRemain = state.waveSpawnTotal;
-        state.spawnInterval = Math.max(0.13, 0.72 - state.wave * 0.012);
+        state.spawnInterval = spawnConfig.interval;
         state.spawnCooldown = 0.18;
-        state.spawnBurst = Math.min(6, 2 + Math.floor(state.wave / 5));
-        state.phaseTimer = 56 + Math.min(40, state.wave * 1.8);
+        state.spawnBurst = spawnConfig.burst;
+        state.phaseTimer = spawnConfig.combatDuration;
         state.bossSpawned = false;
         showBanner(`WAVE ${state.wave} 시작`, 1.5);
         playSfx('wave');
