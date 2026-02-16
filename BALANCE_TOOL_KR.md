@@ -2,6 +2,20 @@
 
 엑셀/CSV 없이 Google Sheets에서 직접 관리하고, URL로 가져와 자동 빌드합니다.
 
+## 수동 업로드용 xlsx 생성 (추천)
+구글시트에서 직접 헤더를 만들기 어렵다면, 먼저 아래 명령으로 템플릿 파일을 만드세요.
+
+```bash
+npm run balance:make-xlsx
+```
+
+- 생성 파일: `/Users/jw.ryu/Desktop/codex-game/balance.xlsx`
+- 포함 내용:
+  - `가이드` 시트: 카테고리/컬럼 수정 규칙
+  - 카테고리 시트 전체(`economy`, `buildings`, ...): `description` 한글 설명 포함
+
+그 다음 `balance.xlsx`를 Google Drive에 업로드해서 Google Sheets로 열면 됩니다.
+
 ## 0) Google Sheets 준비
 - 시트 문서 공유: **링크가 있는 모든 사용자 - 뷰어**
 - 권장: **파일 > 공유 > 웹에 게시**도 켜기

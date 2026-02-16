@@ -1,7 +1,7 @@
 {
   "type": "google-sheets",
   "spreadsheetId": "1KsPQnMqVj-Q6sGegBk4EE_e3IBGzsN5f",
-  "spreadsheetUrl": "https://docs.google.com/spreadsheets/d/1KsPQnMqVj-Q6sGegBk4EE_e3IBGzsN5f/edit?gid=364222562#gid=364222562",
+  "spreadsheetUrl": "https://docs.google.com/spreadsheets/d/1KsPQnMqVj-Q6sGegBk4EE_e3IBGzsN5f/edit?gid=1622529775#gid=1622529775",
   "sheetNames": [
     "economy",
     "buildings",
@@ -15,5 +15,5 @@
     "specialMineral"
   ],
   "pollIntervalSec": 8,
-  "updatedAt": "2026-02-15T15:50:18.265Z"
+  "updatedAt": "2026-02-16T03:28:18.575Z"
 }

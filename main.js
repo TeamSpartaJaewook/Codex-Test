@@ -90,6 +90,8 @@
   const BUILDING_HP_LEVEL_SCALE = b('buildings.hpLevelScalePerLevel', 0.52);
   const BUILDING_UPGRADE_COST_BASE = b('buildings.turretUpgradeCostBase', 1.35);
   const BUILDING_UPGRADE_COST_PER_LEVEL = b('buildings.turretUpgradeCostPerLevel', 0.75);
+  const SUPPLY_COST_EXP_PER_BUILT = b('buildings.supplyCostExpPerBuilt', 1.18);
+  const SUPPLY_COST_FLAT_PER_BUILT = b('buildings.supplyCostFlatPerBuilt', 0);
   const SUPPLY_POP_BONUS = b('buildings.supplyPopBonus', 5);
   const BASE_POPULATION = b('buildings.basePopulation', 10);
 
@@ -175,6 +177,12 @@
   const FIRST_WAVE_BUILD_DURATION = b('waves.firstWaveBuildDuration', 40);
   const WAVE_EASE_BY_WAVE = b('waves.easeByWave', [0.4, 0.56, 0.7, 0.8, 0.88, 0.94, 0.97, 0.99]);
   const WAVE_BUILD_EARLY_BONUS = b('waves.buildEarlyBonusByWave', { 2: 4, 3: 2, 4: 1 });
+  const WAVE_EXP_GROWTH_START_WAVE = b('waves.expGrowthStartWave', 1);
+  const WAVE_EXP_GROWTH_INPUT_SCALE = b('waves.expGrowthInputScale', 0.62);
+  const WAVE_EXP_GROWTH_POWER = b('waves.expGrowthPower', 1.42);
+  const WAVE_EXP_ENEMY_STAT_WEIGHT = b('waves.expEnemyStatWeight', 1.0);
+  const WAVE_EXP_SPAWN_TOTAL_WEIGHT = b('waves.expSpawnTotalWeight', 1.08);
+  const WAVE_EXP_SPAWN_INTERVAL_WEIGHT = b('waves.expSpawnIntervalWeight', 0.78);
 
   const SPECIAL_MINERAL_MIN_DIST = b('specialMineral.minDistanceFromCommand', 560);
   const SPECIAL_MINERAL_RADIUS_MIN = b('specialMineral.radiusMin', 16);
@@ -1217,19 +1225,35 @@
     return base + bonus;
   }
 
+  function getWaveExponentialGrowth(wave) {
+    const startWave = Number.isFinite(WAVE_EXP_GROWTH_START_WAVE) ? WAVE_EXP_GROWTH_START_WAVE : 1;
+    const inputScale = Math.max(0, Number.isFinite(WAVE_EXP_GROWTH_INPUT_SCALE) ? WAVE_EXP_GROWTH_INPUT_SCALE : 0.62);
+    const growthPower = Math.max(0, Number.isFinite(WAVE_EXP_GROWTH_POWER) ? WAVE_EXP_GROWTH_POWER : 1.42);
+    const growthN = Math.max(0, wave - startWave);
+    return Math.pow(1 + growthN * inputScale, growthPower) - 1;
+  }
+
   function getWaveEnemyStatScale(wave) {
     const ease = getWaveEaseMultiplier(wave);
-    return 1 + wave * ENEMY_SCALE_PER_WAVE * (ENEMY_SCALE_EASE_BASE + ease * ENEMY_SCALE_EASE_WEIGHT);
+    const growth = getWaveExponentialGrowth(wave);
+    const baseScale = wave * ENEMY_SCALE_PER_WAVE * (ENEMY_SCALE_EASE_BASE + ease * ENEMY_SCALE_EASE_WEIGHT);
+    const growthMul = 1 + growth * Math.max(0, WAVE_EXP_ENEMY_STAT_WEIGHT);
+    return 1 + baseScale * growthMul;
   }
 
   function getWaveSpawnConfig(wave) {
     const ease = getWaveEaseMultiplier(wave);
+    const growth = getWaveExponentialGrowth(wave);
     const baseTotal = Math.floor(WAVE_SPAWN_TOTAL_BASE + wave * WAVE_SPAWN_TOTAL_PER_WAVE);
     const baseInterval = Math.max(WAVE_SPAWN_INTERVAL_MIN, WAVE_SPAWN_INTERVAL_BASE - wave * WAVE_SPAWN_INTERVAL_PER_WAVE);
     const baseBurst = Math.min(WAVE_SPAWN_BURST_MAX, WAVE_SPAWN_BURST_BASE + Math.floor(wave / WAVE_SPAWN_BURST_STEP_WAVE));
 
-    const total = Math.max(WAVE_SPAWN_TOTAL_MIN, Math.floor(baseTotal * ease));
-    const interval = Math.max(WAVE_SPAWN_INTERVAL_FLOOR, baseInterval * (1 + (1 - ease) * WAVE_SPAWN_INTERVAL_EASE_PENALTY));
+    const totalGrowthMul = 1 + growth * Math.max(0, WAVE_EXP_SPAWN_TOTAL_WEIGHT);
+    const total = Math.max(WAVE_SPAWN_TOTAL_MIN, Math.floor(baseTotal * ease * totalGrowthMul));
+
+    const intervalGrowthDiv = 1 + growth * Math.max(0, WAVE_EXP_SPAWN_INTERVAL_WEIGHT);
+    const intervalBase = baseInterval * (1 + (1 - ease) * WAVE_SPAWN_INTERVAL_EASE_PENALTY);
+    const interval = Math.max(WAVE_SPAWN_INTERVAL_FLOOR, intervalBase / intervalGrowthDiv);
 
     let burst = Math.max(1, Math.round(baseBurst * (WAVE_SPAWN_BURST_EASE_BASE + ease * WAVE_SPAWN_BURST_EASE_WEIGHT)));
     burst = Math.min(baseBurst, burst);
@@ -2474,22 +2498,38 @@
     return Math.round(base * (BUILDING_UPGRADE_COST_BASE + building.level * BUILDING_UPGRADE_COST_PER_LEVEL));
   }
 
+  function getDynamicBuildCost(type) {
+    const def = BUILD_TYPES[type];
+    if (!def) return 0;
+    if (type !== 'supply') return def.cost;
+
+    let builtSupplyCount = 0;
+    for (let i = 0; i < buildings.length; i += 1) {
+      if (buildings[i].type === 'supply') builtSupplyCount += 1;
+    }
+
+    const expPerBuilt = Math.max(1, Number.isFinite(SUPPLY_COST_EXP_PER_BUILT) ? SUPPLY_COST_EXP_PER_BUILT : 1.18);
+    const flatPerBuilt = Math.max(0, Number.isFinite(SUPPLY_COST_FLAT_PER_BUILT) ? SUPPLY_COST_FLAT_PER_BUILT : 0);
+    return Math.round(def.cost * Math.pow(expPerBuilt, builtSupplyCount) + builtSupplyCount * flatPerBuilt);
+  }
+
   function validateBuildPlacement(type, c, r) {
     const def = BUILD_TYPES[type];
     if (!def) {
       return { valid: false, reason: 'invalid', cost: 0, upgradeTarget: null };
     }
+    const buildCost = getDynamicBuildCost(type);
 
     const centerX = (c + def.w * 0.5) * TILE;
     const centerY = (r + def.h * 0.5) * TILE;
 
     const distToPlayer = dist(state.player.x, state.player.y, centerX, centerY);
     if (distToPlayer > BUILD_RANGE) {
-      return { valid: false, reason: 'range', cost: def.cost, upgradeTarget: null };
+      return { valid: false, reason: 'range', cost: buildCost, upgradeTarget: null };
     }
 
     if (!inBounds(c, r) || !inBounds(c + def.w - 1, r + def.h - 1)) {
-      return { valid: false, reason: 'bounds', cost: def.cost, upgradeTarget: null };
+      return { valid: false, reason: 'bounds', cost: buildCost, upgradeTarget: null };
     }
 
     const placeX = c * TILE;
@@ -2497,10 +2537,10 @@
     const placeW = def.w * TILE;
     const placeH = def.h * TILE;
     if (circleRectIntersect(state.player.x, state.player.y, state.player.r + 2, placeX, placeY, placeW, placeH)) {
-      return { valid: false, reason: 'playerOverlap', cost: def.cost, upgradeTarget: null };
+      return { valid: false, reason: 'playerOverlap', cost: buildCost, upgradeTarget: null };
     }
     if (hasFriendlyUnitOverlapRect(placeX, placeY, placeW, placeH)) {
-      return { valid: false, reason: 'unitOverlap', cost: def.cost, upgradeTarget: null };
+      return { valid: false, reason: 'unitOverlap', cost: buildCost, upgradeTarget: null };
     }
 
     const touchedIds = new Set();
@@ -2511,12 +2551,12 @@
         const tr = r + ry;
 
         if (terrainAt(tc, tr)) {
-          return { valid: false, reason: 'blocked', cost: def.cost, upgradeTarget: null };
+          return { valid: false, reason: 'blocked', cost: buildCost, upgradeTarget: null };
         }
 
         const mineral = getMineralAtTile(tc, tr);
         if (mineral && mineral.total > 0) {
-          return { valid: false, reason: 'mineral', cost: def.cost, upgradeTarget: null };
+          return { valid: false, reason: 'mineral', cost: buildCost, upgradeTarget: null };
         }
 
         const existing = getBuildingAtTile(tc, tr);
@@ -2527,7 +2567,7 @@
     }
 
     if (touchedIds.size === 0) {
-      return { valid: true, reason: 'ok', cost: def.cost, upgradeTarget: null };
+      return { valid: true, reason: 'ok', cost: buildCost, upgradeTarget: null };
     }
 
     if (touchedIds.size === 1) {
@@ -2549,7 +2589,7 @@
       }
     }
 
-    return { valid: false, reason: 'overlap', cost: def.cost, upgradeTarget: null };
+    return { valid: false, reason: 'overlap', cost: buildCost, upgradeTarget: null };
   }
 
   function tryBuildAtPointer() {

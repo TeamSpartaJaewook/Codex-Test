@@ -2,7 +2,7 @@
   window.GAME_BALANCE = {
     "economy": {
       "enemyKillReward": 2,
-      "manualWorkerCost": 15,
+      "manualWorkerCost": 50,
       "playerDeathPenalty": 60,
       "repairMineralPerHp": 0.28,
       "startResources": 320
@@ -54,6 +54,8 @@
         }
       },
       "hpLevelScalePerLevel": 0.52,
+      "supplyCostExpPerBuilt": 1.18,
+      "supplyCostFlatPerBuilt": 0,
       "supplyPopBonus": 5,
       "turretUpgradeCostBase": 1.35,
       "turretUpgradeCostPerLevel": 0.75
@@ -204,6 +206,12 @@
         0.97,
         0.99
       ],
+      "expEnemyStatWeight": 1,
+      "expGrowthInputScale": 0.62,
+      "expGrowthPower": 1.42,
+      "expGrowthStartWave": 1,
+      "expSpawnIntervalWeight": 0.78,
+      "expSpawnTotalWeight": 1.08,
       "firstWaveBuildDuration": 40,
       "firstWaveBurst": 1,
       "spawnBurstBase": 2,
