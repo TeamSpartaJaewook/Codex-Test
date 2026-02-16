@@ -35,7 +35,6 @@
   const spawnWorkerButton = document.getElementById('spawnWorkerButton');
   const upgradeCloseButton = document.getElementById('upgradeCloseButton');
   const barracksCloseButton = document.getElementById('barracksCloseButton');
-  const centerCameraButton = document.getElementById('centerCameraButton');
   const restartButton = document.getElementById('restartButton');
 
   const slotButtons = Array.from(document.querySelectorAll('.slotBtn'));
@@ -4366,17 +4365,6 @@
     if (barracksCloseButton) {
       barracksCloseButton.addEventListener('click', () => {
         closeBarracksOverlay();
-      });
-    }
-
-    if (centerCameraButton) {
-      centerCameraButton.addEventListener('click', () => {
-        const cc = state.commandCenter;
-        if (!cc) return;
-        const cp = getBuildingCenter(cc);
-        state.player.x = cp.x;
-        state.player.y = cp.y + TILE * 2;
-        state.centerCameraTimer = 0.7;
       });
     }
 
