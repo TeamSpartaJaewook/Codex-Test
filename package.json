@@ -7,7 +7,8 @@
     "node": ">=20"
   },
   "dependencies": {
-    "xlsx": "^0.18.5"
+    "xlsx": "^0.18.5",
+    "ws": "^8.18.1"
   },
   "scripts": {
     "prestart": "node tools/balance-tool.js build",
@@ -18,7 +19,6 @@
     "balance:build": "node tools/balance-tool.js build",
     "balance:watch": "node tools/balance-tool.js watch",
     "balance:list": "node tools/balance-tool.js list",
-    "balance:get": "node tools/balance-tool.js get",
-    "balance:make-xlsx": "node tools/make-balance-xlsx.js"
+    "balance:get": "node tools/balance-tool.js get"
   }
 }

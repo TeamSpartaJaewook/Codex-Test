@@ -27,6 +27,14 @@
   const lobbyOverlayEl = document.getElementById('lobbyOverlay');
   const nicknameInputEl = document.getElementById('nicknameInput');
   const startGameButton = document.getElementById('startGameButton');
+  const roomCodeInputEl = document.getElementById('roomCodeInput');
+  const createRoomButton = document.getElementById('createRoomButton');
+  const joinRoomButton = document.getElementById('joinRoomButton');
+  const readyRoomButton = document.getElementById('readyRoomButton');
+  const leaveRoomButton = document.getElementById('leaveRoomButton');
+  const roomStatusTextEl = document.getElementById('roomStatusText');
+  const roomPlayersTextEl = document.getElementById('roomPlayersText');
+  const roomReadyTextEl = document.getElementById('roomReadyText');
   const bestRecordSummaryEl = document.getElementById('bestRecordSummary');
   const rankingBodyEl = document.getElementById('rankingBody');
   const gameOverOverlayEl = document.getElementById('gameOverOverlay');
@@ -35,7 +43,6 @@
   const spawnWorkerButton = document.getElementById('spawnWorkerButton');
   const upgradeCloseButton = document.getElementById('upgradeCloseButton');
   const barracksCloseButton = document.getElementById('barracksCloseButton');
-  const centerCameraButton = document.getElementById('centerCameraButton');
   const restartButton = document.getElementById('restartButton');
 
   const slotButtons = Array.from(document.querySelectorAll('.slotBtn'));
@@ -65,6 +72,10 @@
 
   const TEAM_FRIENDLY = 'friendly';
   const TEAM_ENEMY = 'enemy';
+  const OWNER_LOCAL_BUILD_TINT = '#53f18a';
+  const OWNER_REMOTE_BUILD_TINT = '#6faeff';
+  const OWNER_LOCAL_UNIT_TINT = '#7cf5e8';
+  const OWNER_REMOTE_UNIT_TINT = '#7db8ff';
 
   const RAW_BALANCE = (typeof window !== 'undefined' && window.GAME_BALANCE && typeof window.GAME_BALANCE === 'object')
     ? window.GAME_BALANCE
@@ -90,8 +101,6 @@
   const BUILDING_HP_LEVEL_SCALE = b('buildings.hpLevelScalePerLevel', 0.52);
   const BUILDING_UPGRADE_COST_BASE = b('buildings.turretUpgradeCostBase', 1.35);
   const BUILDING_UPGRADE_COST_PER_LEVEL = b('buildings.turretUpgradeCostPerLevel', 0.75);
-  const SUPPLY_COST_EXP_PER_BUILT = b('buildings.supplyCostExpPerBuilt', 1.18);
-  const SUPPLY_COST_FLAT_PER_BUILT = b('buildings.supplyCostFlatPerBuilt', 0);
   const SUPPLY_POP_BONUS = b('buildings.supplyPopBonus', 5);
   const BASE_POPULATION = b('buildings.basePopulation', 10);
 
@@ -167,6 +176,7 @@
   const WAVE_SPAWN_BURST_EASE_BASE = b('waves.spawnBurstEaseBase', 0.55);
   const WAVE_SPAWN_BURST_EASE_WEIGHT = b('waves.spawnBurstEaseWeight', 0.45);
   const WAVE_SPAWN_FIRST_BURST = b('waves.firstWaveBurst', 1);
+  const WAVE_COOP_ENEMY_TOTAL_MULT = b('waves.coopEnemyTotalMultiplier', 2);
   const WAVE_SPAWN_INITIAL_COOLDOWN = b('waves.spawnInitialCooldown', 0.18);
   const WAVE_COMBAT_DURATION_BASE = b('waves.combatDurationBase', 56);
   const WAVE_COMBAT_DURATION_PER_WAVE = b('waves.combatDurationPerWave', 1.8);
@@ -177,12 +187,6 @@
   const FIRST_WAVE_BUILD_DURATION = b('waves.firstWaveBuildDuration', 40);
   const WAVE_EASE_BY_WAVE = b('waves.easeByWave', [0.4, 0.56, 0.7, 0.8, 0.88, 0.94, 0.97, 0.99]);
   const WAVE_BUILD_EARLY_BONUS = b('waves.buildEarlyBonusByWave', { 2: 4, 3: 2, 4: 1 });
-  const WAVE_EXP_GROWTH_START_WAVE = b('waves.expGrowthStartWave', 1);
-  const WAVE_EXP_GROWTH_INPUT_SCALE = b('waves.expGrowthInputScale', 0.62);
-  const WAVE_EXP_GROWTH_POWER = b('waves.expGrowthPower', 1.42);
-  const WAVE_EXP_ENEMY_STAT_WEIGHT = b('waves.expEnemyStatWeight', 1.0);
-  const WAVE_EXP_SPAWN_TOTAL_WEIGHT = b('waves.expSpawnTotalWeight', 1.08);
-  const WAVE_EXP_SPAWN_INTERVAL_WEIGHT = b('waves.expSpawnIntervalWeight', 0.78);
 
   const SPECIAL_MINERAL_MIN_DIST = b('specialMineral.minDistanceFromCommand', 560);
   const SPECIAL_MINERAL_RADIUS_MIN = b('specialMineral.radiusMin', 16);
@@ -209,6 +213,14 @@
   const LOBBY_NICK_KEY = 'mineral-survivor:nickname';
   const PLAYER_ID_MIN_LEN = 2;
   const PLAYER_ID_MAX_LEN = 16;
+  const ROOM_CODE_KEY = 'mineral-survivor:room-code';
+  const ROOM_POLL_INTERVAL_LOBBY = 0.1;
+  const ROOM_POLL_INTERVAL_GAME = 0.1;
+  const ROOM_HEARTBEAT_INTERVAL = 0.033;
+  const ROOM_POLL_INTERVAL_LOBBY_WS = 1.4;
+  const ROOM_POLL_INTERVAL_GAME_WS = 0.8;
+  const ROOM_WS_RETRY_MIN = 0.45;
+  const ROOM_WS_RETRY_MAX = 4.5;
 
   const terrainBlocked = new Uint8Array(MAP_SIZE);
   const discovered = new Uint8Array(MAP_SIZE);
@@ -421,6 +433,49 @@
     serverRanking: [],
     startPending: false,
     offlineMode: window.location.protocol === 'file:',
+    worldSeed: 1,
+
+    multiplayer: {
+      lobbyActive: false,
+      active: false,
+      roomCode: '',
+      slot: 0,
+      seed: 1,
+      ready: false,
+      status: 'idle',
+      players: [],
+      pollTimer: 0,
+      heartbeatTimer: 0,
+      pollBusy: false,
+      heartbeatBusy: false,
+      startAt: 0,
+      failureNotified: false,
+      rewardChosen: false,
+      remotePlayerId: '',
+      remotePlayer: {
+        x: 0,
+        y: 0,
+        facing: 0,
+        drawX: 0,
+        drawY: 0,
+        drawFacing: 0,
+        online: false,
+        commandHp: 0,
+        wave: 1,
+        phase: '',
+      },
+      remoteBuildings: [],
+      remoteUnits: [],
+      sharedWorld: null,
+      sharedWorldAt: 0,
+      wsSocket: null,
+      wsConnected: false,
+      wsRetryTimer: 0,
+      wsBackoff: ROOM_WS_RETRY_MIN,
+      wsLastMessageAt: 0,
+      ownerEconomy: {},
+      ownerEconomyReport: {},
+    },
 
     buildMode: null,
     cardOptions: [],
@@ -515,6 +570,13 @@
     return a + (b - a) * t;
   }
 
+  function lerpAngle(a, b, t) {
+    let d = (b - a) % (Math.PI * 2);
+    if (d > Math.PI) d -= Math.PI * 2;
+    if (d < -Math.PI) d += Math.PI * 2;
+    return a + d * t;
+  }
+
   function dist2(ax, ay, bx, by) {
     const dx = ax - bx;
     const dy = ay - by;
@@ -533,16 +595,141 @@
     return Math.floor(randRange(min, max + 1));
   }
 
-  function gainResources(amount) {
-    if (!Number.isFinite(amount) || amount <= 0) return;
-    state.resources += amount;
-    state.totalMineralsEarned += amount;
+  function createSeededRng(seed) {
+    let s = (Number(seed) >>> 0) || 1;
+    return () => {
+      s = (s * 1664525 + 1013904223) >>> 0;
+      return s / 4294967296;
+    };
   }
 
-  function spendResources(amount) {
+  function normalizeOwnerSlot(ownerSlot) {
+    if (!isMultiplayerActive()) return null;
+    if (Number.isInteger(ownerSlot)) return ownerSlot;
+    return state.multiplayer.slot;
+  }
+
+  function ensureOwnerEconomy(ownerSlot) {
+    if (!isMultiplayerActive()) return null;
+    const slot = normalizeOwnerSlot(ownerSlot);
+    if (!Number.isInteger(slot)) return null;
+    const key = String(slot);
+    if (!state.multiplayer.ownerEconomy[key]) {
+      state.multiplayer.ownerEconomy[key] = {
+        resources: START_RESOURCES,
+        totalMineralsEarned: 0,
+      };
+    }
+    return state.multiplayer.ownerEconomy[key];
+  }
+
+  function resetOwnerEconomy() {
+    state.multiplayer.ownerEconomy = {
+      '0': { resources: START_RESOURCES, totalMineralsEarned: 0 },
+      '1': { resources: START_RESOURCES, totalMineralsEarned: 0 },
+    };
+    state.multiplayer.ownerEconomyReport = {};
+  }
+
+  function syncLocalEconomyToOwnerSlot() {
+    if (!isMultiplayerActive()) return;
+    const eco = ensureOwnerEconomy(state.multiplayer.slot);
+    if (!eco) return;
+    eco.resources = Math.max(0, Math.floor(state.resources));
+    eco.totalMineralsEarned = Math.max(0, Math.floor(state.totalMineralsEarned));
+  }
+
+  function setOwnerEconomy(ownerSlot, resources, totalMineralsEarned = null) {
+    if (!isMultiplayerActive()) return;
+    const eco = ensureOwnerEconomy(ownerSlot);
+    if (!eco) return;
+    if (Number.isFinite(resources)) {
+      eco.resources = Math.max(0, Math.floor(resources));
+    }
+    if (Number.isFinite(totalMineralsEarned)) {
+      eco.totalMineralsEarned = Math.max(0, Math.floor(totalMineralsEarned));
+    }
+    const slot = normalizeOwnerSlot(ownerSlot);
+    if (slot === state.multiplayer.slot) {
+      state.resources = eco.resources;
+      state.totalMineralsEarned = eco.totalMineralsEarned;
+    }
+  }
+
+  function applyReportedOwnerEconomy(ownerSlot, resources, totalMineralsEarned = null) {
+    if (!isMultiplayerActive()) return;
+    const slot = normalizeOwnerSlot(ownerSlot);
+    if (!Number.isInteger(slot)) return;
+    const reportKey = String(slot);
+    const reportedResources = Number(resources);
+    const reportedTotal = Number(totalMineralsEarned);
+    const prevReport = state.multiplayer.ownerEconomyReport[reportKey] || null;
+    if (
+      slot === state.multiplayer.slot
+      && !prevReport
+      && Number.isFinite(reportedResources)
+      && reportedResources <= 0
+      && state.resources > 0
+    ) {
+      return;
+    }
+    const resChanged = Number.isFinite(reportedResources)
+      && (!prevReport || reportedResources !== prevReport.resources);
+    const totalChanged = Number.isFinite(reportedTotal)
+      && (!prevReport || reportedTotal !== prevReport.totalMineralsEarned);
+    if (!resChanged && !totalChanged) return;
+    setOwnerEconomy(slot, reportedResources, reportedTotal);
+    state.multiplayer.ownerEconomyReport[reportKey] = {
+      resources: Number.isFinite(reportedResources)
+        ? Math.max(0, Math.floor(reportedResources))
+        : (prevReport ? prevReport.resources : 0),
+      totalMineralsEarned: Number.isFinite(reportedTotal)
+        ? Math.max(0, Math.floor(reportedTotal))
+        : (prevReport ? prevReport.totalMineralsEarned : 0),
+    };
+  }
+
+  function getOwnerResources(ownerSlot) {
+    if (!isMultiplayerActive()) return state.resources;
+    const slot = normalizeOwnerSlot(ownerSlot);
+    if (slot === state.multiplayer.slot) return state.resources;
+    const eco = ensureOwnerEconomy(slot);
+    return eco ? eco.resources : state.resources;
+  }
+
+  function gainResources(amount, ownerSlot = null) {
+    if (!Number.isFinite(amount) || amount <= 0) return;
+    if (!isMultiplayerActive()) {
+      state.resources += amount;
+      state.totalMineralsEarned += amount;
+      return;
+    }
+    const slot = normalizeOwnerSlot(ownerSlot);
+    const eco = ensureOwnerEconomy(slot);
+    if (!eco) return;
+    eco.resources += amount;
+    eco.totalMineralsEarned += amount;
+    if (slot === state.multiplayer.slot) {
+      state.resources = eco.resources;
+      state.totalMineralsEarned = eco.totalMineralsEarned;
+    }
+  }
+
+  function spendResources(amount, ownerSlot = null) {
     if (!Number.isFinite(amount) || amount <= 0) return true;
-    if (state.resources < amount) return false;
-    state.resources -= amount;
+    if (!isMultiplayerActive()) {
+      if (state.resources < amount) return false;
+      state.resources -= amount;
+      return true;
+    }
+    const slot = normalizeOwnerSlot(ownerSlot);
+    const eco = ensureOwnerEconomy(slot);
+    if (!eco) return false;
+    if (eco.resources < amount) return false;
+    eco.resources -= amount;
+    if (slot === state.multiplayer.slot) {
+      state.resources = eco.resources;
+    }
     return true;
   }
 
@@ -567,6 +754,18 @@
     const base = API_BASE.replace(/\/+$/, '');
     if (!path) return base;
     return `${base}${path.startsWith('/') ? path : `/${path}`}`;
+  }
+
+  function wsUrl(path) {
+    const targetPath = path.startsWith('/') ? path : `/${path}`;
+    const base = API_BASE
+      ? new URL(API_BASE, window.location.href)
+      : new URL(window.location.origin);
+    base.pathname = targetPath;
+    base.search = '';
+    base.hash = '';
+    base.protocol = base.protocol === 'https:' ? 'wss:' : 'ws:';
+    return base.toString();
   }
 
   async function apiRequest(path, options = {}) {
@@ -594,6 +793,7 @@
 
   function setOfflineMode(reason = '') {
     if (state.offlineMode) return;
+    closeRoomSocket();
     state.offlineMode = true;
     state.serverRanking = [];
     if (reason) {
@@ -707,6 +907,437 @@
     }
   }
 
+  function getRoomCodeInput(useSaved = true) {
+    const inputCode = (roomCodeInputEl ? roomCodeInputEl.value : '').trim();
+    if (inputCode) return inputCode.toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 12);
+    if (!useSaved) return '';
+    const saved = (localStorage.getItem(ROOM_CODE_KEY) || '').trim();
+    if (saved) return saved.toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 12);
+    return '';
+  }
+
+  function saveRoomCode(code) {
+    try {
+      localStorage.setItem(ROOM_CODE_KEY, code);
+    } catch (err) {
+      // ignore
+    }
+  }
+
+  function closeRoomSocket() {
+    const ws = state.multiplayer.wsSocket;
+    state.multiplayer.wsSocket = null;
+    state.multiplayer.wsConnected = false;
+    state.multiplayer.wsLastMessageAt = 0;
+    if (!ws) return;
+    try {
+      ws.onopen = null;
+      ws.onmessage = null;
+      ws.onerror = null;
+      ws.onclose = null;
+      ws.close();
+    } catch (err) {
+      // ignore
+    }
+  }
+
+  function scheduleRoomSocketReconnect(baseDelay = ROOM_WS_RETRY_MIN) {
+    const delay = Math.max(baseDelay, state.multiplayer.wsBackoff || ROOM_WS_RETRY_MIN);
+    state.multiplayer.wsRetryTimer = delay;
+    state.multiplayer.wsBackoff = Math.min(ROOM_WS_RETRY_MAX, delay * 1.6);
+  }
+
+  function onRoomSocketMessage(raw) {
+    let msg = null;
+    try {
+      msg = JSON.parse(typeof raw === 'string' ? raw : String(raw || ''));
+    } catch (err) {
+      return;
+    }
+    if (!msg || typeof msg !== 'object') return;
+    if (msg.type !== 'room') return;
+
+    if (!msg.room || typeof msg.room !== 'object') {
+      if (msg.reason === 'closed' && state.multiplayer.lobbyActive) {
+        showToast('방이 종료되었습니다', 1.4);
+        resetMultiplayerState();
+      }
+      return;
+    }
+
+    state.multiplayer.wsLastMessageAt = Date.now();
+    syncRoomSnapshot(msg.room);
+
+    if (msg.room.status === 'started' && state.inLobby) {
+      startMultiplayerGameFromRoom(msg.room);
+      return;
+    }
+
+    if (msg.room.status === 'failed' && !state.inLobby && state.multiplayer.active) {
+      if (state.phase !== PHASE_GAMEOVER || gameOverOverlayEl.classList.contains('hidden')) {
+        showToast('협동 방 패배: 팀 커맨드 센터 붕괴', 1.9);
+        enterGameOver();
+      }
+    }
+  }
+
+  function connectRoomSocket() {
+    if (state.offlineMode) return;
+    if (!window.WebSocket) return;
+    if (!state.playerId || !state.multiplayer.roomCode) return;
+    if (state.multiplayer.wsSocket) return;
+
+    const playerId = encodeURIComponent(state.playerId);
+    const roomCode = encodeURIComponent(state.multiplayer.roomCode);
+    const url = `${wsUrl('/ws')}?playerId=${playerId}&roomCode=${roomCode}`;
+
+    let ws = null;
+    try {
+      ws = new window.WebSocket(url);
+    } catch (err) {
+      scheduleRoomSocketReconnect();
+      return;
+    }
+
+    state.multiplayer.wsSocket = ws;
+    state.multiplayer.wsConnected = false;
+
+    ws.onopen = () => {
+      if (state.multiplayer.wsSocket !== ws) return;
+      state.multiplayer.wsConnected = true;
+      state.multiplayer.wsBackoff = ROOM_WS_RETRY_MIN;
+      state.multiplayer.wsRetryTimer = 0;
+      state.multiplayer.wsLastMessageAt = Date.now();
+    };
+
+    ws.onmessage = (event) => {
+      if (state.multiplayer.wsSocket !== ws) return;
+      onRoomSocketMessage(event && 'data' in event ? event.data : '');
+    };
+
+    ws.onerror = () => {
+      // close 이벤트에서 재연결 스케줄 처리
+    };
+
+    ws.onclose = () => {
+      if (state.multiplayer.wsSocket !== ws) return;
+      state.multiplayer.wsSocket = null;
+      state.multiplayer.wsConnected = false;
+      scheduleRoomSocketReconnect();
+    };
+  }
+
+  function maintainRoomSocket(dt) {
+    const shouldUseSocket = !state.offlineMode
+      && !!window.WebSocket
+      && !!state.playerId
+      && !!state.multiplayer.roomCode
+      && (state.multiplayer.lobbyActive || state.multiplayer.active);
+
+    if (!shouldUseSocket) {
+      closeRoomSocket();
+      return;
+    }
+
+    if (state.multiplayer.wsSocket) return;
+
+    state.multiplayer.wsRetryTimer -= dt;
+    if (state.multiplayer.wsRetryTimer > 0) return;
+    connectRoomSocket();
+  }
+
+  function resetMultiplayerState(clearInput = false) {
+    closeRoomSocket();
+    state.multiplayer.lobbyActive = false;
+    state.multiplayer.active = false;
+    state.multiplayer.roomCode = '';
+    state.multiplayer.slot = 0;
+    state.multiplayer.seed = 1;
+    state.multiplayer.ready = false;
+    state.multiplayer.status = 'idle';
+    state.multiplayer.players = [];
+    state.multiplayer.pollTimer = 0;
+    state.multiplayer.heartbeatTimer = 0;
+    state.multiplayer.pollBusy = false;
+    state.multiplayer.heartbeatBusy = false;
+    state.multiplayer.startAt = 0;
+    state.multiplayer.failureNotified = false;
+    state.multiplayer.rewardChosen = false;
+    state.multiplayer.remotePlayerId = '';
+    state.multiplayer.remotePlayer.x = 0;
+    state.multiplayer.remotePlayer.y = 0;
+    state.multiplayer.remotePlayer.facing = 0;
+    state.multiplayer.remotePlayer.drawX = 0;
+    state.multiplayer.remotePlayer.drawY = 0;
+    state.multiplayer.remotePlayer.drawFacing = 0;
+    state.multiplayer.remotePlayer.online = false;
+    state.multiplayer.remotePlayer.commandHp = 0;
+    state.multiplayer.remotePlayer.wave = 1;
+    state.multiplayer.remotePlayer.phase = '';
+    state.multiplayer.remoteBuildings = [];
+    state.multiplayer.remoteUnits = [];
+    state.multiplayer.sharedWorld = null;
+    state.multiplayer.sharedWorldAt = 0;
+    state.multiplayer.wsRetryTimer = 0;
+    state.multiplayer.wsBackoff = ROOM_WS_RETRY_MIN;
+    state.multiplayer.wsLastMessageAt = 0;
+    resetOwnerEconomy();
+    if (clearInput && roomCodeInputEl) {
+      roomCodeInputEl.value = '';
+    }
+    renderRoomUi();
+  }
+
+  function syncRoomSnapshot(room) {
+    if (!room || typeof room !== 'object') return;
+    state.multiplayer.lobbyActive = true;
+    state.multiplayer.roomCode = room.roomCode || state.multiplayer.roomCode;
+    state.multiplayer.status = room.status || 'waiting';
+    state.multiplayer.seed = Number(room.seed) || state.multiplayer.seed || 1;
+    state.multiplayer.startAt = Number(room.startAt) || 0;
+    state.multiplayer.players = Array.isArray(room.players) ? room.players.slice() : [];
+    state.multiplayer.ready = !!(room.you && room.you.ready);
+    const serverRewardChosen = !!(room.you && room.you.rewardChosen);
+    state.multiplayer.rewardChosen = state.phase === PHASE_REWARD
+      ? (state.multiplayer.rewardChosen || serverRewardChosen)
+      : serverRewardChosen;
+    state.multiplayer.slot = Number(room.you && room.you.slot) || 0;
+    state.multiplayer.pollTimer = 0;
+    if (Array.isArray(state.multiplayer.players)) {
+      for (let i = 0; i < state.multiplayer.players.length; i += 1) {
+        const p = state.multiplayer.players[i];
+        if (!p || !Number.isInteger(p.slot)) continue;
+        applyReportedOwnerEconomy(p.slot, p.resources, p.totalMineralsEarned);
+      }
+    }
+    if (room.you) {
+      applyReportedOwnerEconomy(state.multiplayer.slot, room.you.resources, room.you.totalMineralsEarned);
+      if (Number.isFinite(Number(room.you.populationLimit))) {
+        state.populationLimit = Math.max(BASE_POPULATION, Math.floor(Number(room.you.populationLimit)));
+      }
+      syncLocalEconomyToOwnerSlot();
+    }
+
+    const remote = state.multiplayer.players.find((p) => p.playerId !== state.playerId) || null;
+    state.multiplayer.remotePlayerId = remote ? remote.playerId : '';
+    if (remote) {
+      state.multiplayer.remotePlayer.x = Number(remote.x) || 0;
+      state.multiplayer.remotePlayer.y = Number(remote.y) || 0;
+      state.multiplayer.remotePlayer.facing = Number(remote.facing) || 0;
+      if (state.multiplayer.remotePlayer.drawX <= 0 && state.multiplayer.remotePlayer.drawY <= 0) {
+        state.multiplayer.remotePlayer.drawX = state.multiplayer.remotePlayer.x;
+        state.multiplayer.remotePlayer.drawY = state.multiplayer.remotePlayer.y;
+        state.multiplayer.remotePlayer.drawFacing = state.multiplayer.remotePlayer.facing;
+      }
+      state.multiplayer.remotePlayer.online = !!remote.online;
+      state.multiplayer.remotePlayer.commandHp = Number(remote.commandHp) || 0;
+      state.multiplayer.remotePlayer.wave = Number(remote.wave) || 1;
+      state.multiplayer.remotePlayer.phase = remote.phase || '';
+      const remoteSlot = Number.isInteger(remote.slot) ? remote.slot : null;
+      state.multiplayer.remoteBuildings = Array.isArray(remote.buildings)
+        ? remote.buildings.map((b) => ({ ...b, ownerSlot: Number.isInteger(b.ownerSlot) ? b.ownerSlot : remoteSlot }))
+        : [];
+      state.multiplayer.remoteUnits = Array.isArray(remote.units)
+        ? remote.units.map((u) => ({ ...u, ownerSlot: Number.isInteger(u.ownerSlot) ? u.ownerSlot : remoteSlot }))
+        : [];
+    } else {
+      state.multiplayer.remotePlayer.online = false;
+      state.multiplayer.remotePlayer.drawX = 0;
+      state.multiplayer.remotePlayer.drawY = 0;
+      state.multiplayer.remotePlayer.drawFacing = 0;
+      state.multiplayer.remotePlayer.commandHp = 0;
+      state.multiplayer.remotePlayer.wave = 1;
+      state.multiplayer.remotePlayer.phase = '';
+      state.multiplayer.remoteBuildings = [];
+      state.multiplayer.remoteUnits = [];
+    }
+
+    if (room.world && typeof room.world === 'object') {
+      state.multiplayer.sharedWorld = room.world;
+      state.multiplayer.sharedWorldAt = Date.now();
+      if (state.multiplayer.active && !isAuthorityClient()) {
+        applySharedWorldSnapshot(room.world);
+      }
+    }
+    renderRoomUi();
+  }
+
+  function renderRoomUi() {
+    if (roomStatusTextEl) {
+      if (!state.multiplayer.lobbyActive) {
+        roomStatusTextEl.textContent = '현재 방: 없음';
+      } else {
+        const countdown = Math.max(0, Math.ceil((state.multiplayer.startAt - Date.now()) / 1000));
+        const statusLabel = state.multiplayer.status === 'waiting'
+          ? '대기'
+          : state.multiplayer.status === 'starting'
+            ? `시작 카운트다운 ${countdown}초`
+            : state.multiplayer.status === 'started'
+              ? '게임 진행중'
+              : state.multiplayer.status === 'failed'
+                ? '게임 패배'
+                : state.multiplayer.status;
+        roomStatusTextEl.textContent = `현재 방: ${state.multiplayer.roomCode} (${statusLabel})`;
+      }
+    }
+
+    const sortedPlayers = state.multiplayer.players
+      .slice()
+      .sort((a, b) => (a.slot || 0) - (b.slot || 0));
+    const me = sortedPlayers.find((p) => p.playerId === state.playerId) || null;
+    const other = sortedPlayers.find((p) => p.playerId !== state.playerId) || null;
+
+    if (roomPlayersTextEl) {
+      if (!state.multiplayer.lobbyActive || !state.multiplayer.players.length) {
+        roomPlayersTextEl.textContent = '참여자: -';
+      } else {
+        const rows = sortedPlayers
+          .map((p) => {
+            const selfMark = p.playerId === state.playerId ? ' (나)' : '';
+            const ready = p.ready ? '레디' : '대기';
+            const online = p.online === false ? '오프라인' : '온라인';
+            return `[S${(p.slot || 0) + 1}] ${p.playerId}${selfMark} - ${ready} / ${online}`;
+          });
+        roomPlayersTextEl.textContent = `참여자: ${rows.join(' / ')}`;
+      }
+    }
+
+    if (roomReadyTextEl) {
+      if (!state.multiplayer.lobbyActive) {
+        roomReadyTextEl.textContent = '레디 상태: -';
+      } else {
+        const meReady = me ? (me.ready ? '레디' : '대기') : '-';
+        const otherText = !other
+          ? '상대 없음'
+          : `${other.playerId} ${other.ready ? '레디' : '대기'}`;
+        const inReward = state.multiplayer.status === 'started'
+          && ((me && me.phase === PHASE_REWARD) || (other && other.phase === PHASE_REWARD));
+        if (inReward) {
+          const mePick = me ? (me.rewardChosen ? '선택완료' : '선택중') : '-';
+          const otherPick = !other ? '상대 없음' : `${other.playerId} ${other.rewardChosen ? '선택완료' : '선택중'}`;
+          roomReadyTextEl.textContent = `카드 선택: 나(${mePick}) | 상대(${otherPick})`;
+        } else {
+          roomReadyTextEl.textContent = `레디 상태: 나(${meReady}) | 상대(${otherText})`;
+        }
+      }
+    }
+
+    if (readyRoomButton) {
+      readyRoomButton.disabled = !state.multiplayer.lobbyActive;
+      readyRoomButton.textContent = state.multiplayer.ready ? '레디 해제' : '레디';
+    }
+    if (leaveRoomButton) {
+      leaveRoomButton.disabled = !state.multiplayer.lobbyActive;
+    }
+    if (createRoomButton) {
+      createRoomButton.disabled = state.multiplayer.lobbyActive;
+    }
+    if (joinRoomButton) {
+      joinRoomButton.disabled = state.multiplayer.lobbyActive;
+    }
+    if (roomCodeInputEl) {
+      roomCodeInputEl.disabled = state.multiplayer.lobbyActive;
+    }
+  }
+
+  async function createRoomOnServer(playerId, roomCode = '') {
+    const payload = { playerId };
+    if (roomCode) payload.roomCode = roomCode;
+    return apiRequest('/api/rooms/create', {
+      method: 'POST',
+      body: JSON.stringify(payload),
+    });
+  }
+
+  async function joinRoomOnServer(playerId, roomCode) {
+    return apiRequest('/api/rooms/join', {
+      method: 'POST',
+      body: JSON.stringify({ playerId, roomCode }),
+    });
+  }
+
+  async function setRoomReadyOnServer(playerId, roomCode, ready) {
+    return apiRequest('/api/rooms/ready', {
+      method: 'POST',
+      body: JSON.stringify({ playerId, roomCode, ready }),
+    });
+  }
+
+  async function fetchRoomStateOnServer(playerId, roomCode) {
+    const q = `?playerId=${encodeURIComponent(playerId)}&roomCode=${encodeURIComponent(roomCode)}`;
+    return apiRequest(`/api/rooms/state${q}`);
+  }
+
+  async function leaveRoomOnServer(playerId, roomCode) {
+    return apiRequest('/api/rooms/leave', {
+      method: 'POST',
+      body: JSON.stringify({ playerId, roomCode }),
+    });
+  }
+
+  async function reportRoomHeartbeat() {
+    if (!state.multiplayer.active || !state.playerId || !state.multiplayer.roomCode) return;
+    if (state.multiplayer.heartbeatBusy) return;
+    syncLocalEconomyToOwnerSlot();
+    state.multiplayer.heartbeatBusy = true;
+    const command = getLocalMainCommandCenter();
+    const worldSnapshot = isAuthorityClient() ? collectAuthoritativeWorldSnapshot() : null;
+    try {
+      const data = await apiRequest('/api/rooms/heartbeat', {
+        method: 'POST',
+        body: JSON.stringify({
+          playerId: state.playerId,
+          roomCode: state.multiplayer.roomCode,
+          x: state.player.x,
+          y: state.player.y,
+          facing: state.player.facingAngle,
+          commandHp: command ? Math.max(0, Math.floor(command.hp)) : 0,
+          wave: state.wave,
+          phase: state.phase,
+          resources: Math.max(0, Math.floor(state.resources)),
+          totalMineralsEarned: Math.max(0, Math.floor(state.totalMineralsEarned)),
+          populationUsed: Math.max(0, Math.floor(getPopulationUsed())),
+          populationLimit: Math.max(0, Math.floor(getPopulationLimit())),
+          rewardChosen: state.phase === PHASE_REWARD && !!state.multiplayer.rewardChosen,
+          buildings: collectLocalSharedBuildings(),
+          units: collectLocalSharedUnits(),
+          world: worldSnapshot || undefined,
+        }),
+      });
+      if (data && data.room) {
+        syncRoomSnapshot(data.room);
+      }
+    } catch (err) {
+      // ignore heartbeat failures for stability
+    } finally {
+      state.multiplayer.heartbeatBusy = false;
+    }
+  }
+
+  function triggerImmediateHeartbeat() {
+    if (!state.multiplayer.active) return;
+    state.multiplayer.heartbeatTimer = 0;
+    reportRoomHeartbeat();
+  }
+
+  async function reportRoomFailure(reason = 'command_destroyed') {
+    if (!state.multiplayer.active || !state.playerId || !state.multiplayer.roomCode) return;
+    if (state.multiplayer.failureNotified) return;
+    state.multiplayer.failureNotified = true;
+    try {
+      await apiRequest('/api/rooms/fail', {
+        method: 'POST',
+        body: JSON.stringify({
+          playerId: state.playerId,
+          roomCode: state.multiplayer.roomCode,
+          reason,
+        }),
+      });
+    } catch (err) {
+      // ignore
+    }
+  }
+
   function saveCurrentRecord() {
     if (state.recordSaved) return;
     state.recordSaved = true;
@@ -736,6 +1367,10 @@
     state.inLobby = true;
     state.startPending = false;
     state.buildMode = null;
+    if ((state.multiplayer.active || state.multiplayer.lobbyActive) && state.playerId && state.multiplayer.roomCode) {
+      leaveRoomOnServer(state.playerId, state.multiplayer.roomCode).catch(() => {});
+    }
+    resetMultiplayerState();
     updateSlotButtonState();
     closeUpgradeOverlay();
     closeBarracksOverlay();
@@ -746,6 +1381,10 @@
       const saved = (localStorage.getItem(LOBBY_NICK_KEY) || '').trim();
       nicknameInputEl.value = saved ? saved.slice(0, 16) : '';
     }
+    if (roomCodeInputEl) {
+      const savedCode = (localStorage.getItem(ROOM_CODE_KEY) || '').trim();
+      roomCodeInputEl.value = savedCode ? savedCode.slice(0, 12) : '';
+    }
 
     if (lobbyOverlayEl) {
       lobbyOverlayEl.classList.remove('hidden');
@@ -753,7 +1392,7 @@
     }
     if (startGameButton) {
       startGameButton.disabled = false;
-      startGameButton.textContent = '게임 시작';
+      startGameButton.textContent = '솔로 시작';
     }
     renderLobbyRanking();
     fetchRankingFromServer();
@@ -769,6 +1408,10 @@
 
   async function startGameFromLobby() {
     if (state.startPending) return;
+    if (state.multiplayer.lobbyActive) {
+      showToast('멀티 방에서 나간 뒤 솔로 시작 가능합니다', 1.4);
+      return;
+    }
     const nickname = getNickname();
     if (nickname.length < PLAYER_ID_MIN_LEN) {
       showToast(`아이디는 ${PLAYER_ID_MIN_LEN}자 이상이어야 합니다`, 1.4);
@@ -794,7 +1437,7 @@
           state.startPending = false;
           if (startGameButton) {
             startGameButton.disabled = false;
-            startGameButton.textContent = '게임 시작';
+            startGameButton.textContent = '솔로 시작';
           }
           return;
         }
@@ -806,7 +1449,7 @@
           state.startPending = false;
           if (startGameButton) {
             startGameButton.disabled = false;
-            startGameButton.textContent = '게임 시작';
+            startGameButton.textContent = '솔로 시작';
           }
           return;
         }
@@ -817,6 +1460,7 @@
     if (nicknameInputEl) nicknameInputEl.value = nickname;
 
     hideLobby();
+    resetMultiplayerState();
     resetGame();
     state.playerId = nickname;
 
@@ -829,7 +1473,241 @@
     state.startPending = false;
     if (startGameButton) {
       startGameButton.disabled = false;
-      startGameButton.textContent = '게임 시작';
+      startGameButton.textContent = '솔로 시작';
+    }
+  }
+
+  async function ensureMultiplayerIdentity() {
+    const nickname = getNickname();
+    if (nickname.length < PLAYER_ID_MIN_LEN) {
+      showToast(`아이디는 ${PLAYER_ID_MIN_LEN}자 이상이어야 합니다`, 1.4);
+      return null;
+    }
+    if (nickname.length > PLAYER_ID_MAX_LEN) {
+      showToast(`아이디는 ${PLAYER_ID_MAX_LEN}자 이하여야 합니다`, 1.4);
+      return null;
+    }
+    if (state.offlineMode) {
+      showToast('멀티플레이는 서버 연결이 필요합니다', 1.6);
+      return null;
+    }
+
+    try {
+      await registerPlayerId(nickname);
+    } catch (err) {
+      if (err.code === 'ID_EXISTS') {
+        // 멀티 로비에서는 기존 등록 아이디 재사용 허용
+      } else {
+        if (isNetworkError(err)) {
+          setOfflineMode('연결 실패');
+        } else {
+          showToast('서버에 연결할 수 없습니다', 1.6);
+        }
+        return null;
+      }
+    }
+
+    saveNickname(nickname);
+    if (nicknameInputEl) nicknameInputEl.value = nickname;
+    state.playerId = nickname;
+    return nickname;
+  }
+
+  function startMultiplayerGameFromRoom(room) {
+    if (!room || !room.you) return;
+    syncRoomSnapshot(room);
+    const playerCount = Array.isArray(room.players) ? room.players.length : 1;
+    const startedRoomCode = state.multiplayer.roomCode;
+
+    if (playerCount <= 1) {
+      resetMultiplayerState();
+      hideLobby();
+      resetGame();
+      if (state.playerId && startedRoomCode) {
+        leaveRoomOnServer(state.playerId, startedRoomCode).catch(() => {});
+      }
+      if (!state.audioUnlocked) {
+        ensureAudioContext();
+        state.audioUnlocked = true;
+      }
+      startBgm();
+      showToast('단독 시작: 1인 모드', 1.2);
+      return;
+    }
+
+    state.multiplayer.active = true;
+    state.multiplayer.failureNotified = false;
+    state.multiplayer.rewardChosen = false;
+    hideLobby();
+    resetGame();
+    if (!isAuthorityClient() && room.world) {
+      applySharedWorldSnapshot(room.world);
+    }
+    if (!state.audioUnlocked) {
+      ensureAudioContext();
+      state.audioUnlocked = true;
+    }
+    startBgm();
+    showToast(`방 ${state.multiplayer.roomCode} 시작`, 1.2);
+  }
+
+  async function createRoomFromLobby() {
+    if (state.startPending) return;
+    state.startPending = true;
+    const nickname = await ensureMultiplayerIdentity();
+    if (!nickname) {
+      state.startPending = false;
+      return;
+    }
+    const requestedCode = getRoomCodeInput(false);
+    try {
+      const data = await createRoomOnServer(nickname, requestedCode);
+      if (data && data.room) {
+        syncRoomSnapshot(data.room);
+        if (roomCodeInputEl) roomCodeInputEl.value = data.room.roomCode || '';
+        saveRoomCode(data.room.roomCode || '');
+        showToast(`방 생성 완료: ${data.room.roomCode}`, 1.5);
+      }
+    } catch (err) {
+      if (isNetworkError(err)) {
+        setOfflineMode('방 생성 실패');
+      } else {
+        showToast(err.message || '방 생성 실패', 1.6);
+      }
+    } finally {
+      state.startPending = false;
+    }
+  }
+
+  async function joinRoomFromLobby() {
+    if (state.startPending) return;
+    const roomCode = getRoomCodeInput();
+    if (!roomCode) {
+      showToast('방 코드를 입력하세요', 1.2);
+      return;
+    }
+
+    state.startPending = true;
+    const nickname = await ensureMultiplayerIdentity();
+    if (!nickname) {
+      state.startPending = false;
+      return;
+    }
+
+    try {
+      const data = await joinRoomOnServer(nickname, roomCode);
+      if (data && data.room) {
+        syncRoomSnapshot(data.room);
+        if (roomCodeInputEl) roomCodeInputEl.value = data.room.roomCode || roomCode;
+        saveRoomCode(data.room.roomCode || roomCode);
+        showToast(`방 입장 완료: ${data.room.roomCode}`, 1.4);
+      }
+    } catch (err) {
+      if (isNetworkError(err)) {
+        setOfflineMode('방 입장 실패');
+      } else {
+        showToast(err.message || '방 입장 실패', 1.6);
+      }
+    } finally {
+      state.startPending = false;
+    }
+  }
+
+  async function toggleRoomReadyFromLobby() {
+    if (!state.multiplayer.lobbyActive || !state.multiplayer.roomCode || !state.playerId) {
+      showToast('먼저 방을 생성/입장하세요', 1.2);
+      return;
+    }
+    try {
+      const data = await setRoomReadyOnServer(
+        state.playerId,
+        state.multiplayer.roomCode,
+        !state.multiplayer.ready,
+      );
+      if (data && data.room) {
+        syncRoomSnapshot(data.room);
+        if (data.room.status === 'started') {
+          startMultiplayerGameFromRoom(data.room);
+          return;
+        }
+        if (data.room.status === 'starting') {
+          showToast('카운트다운 시작', 1.0);
+        } else {
+          showToast(state.multiplayer.ready ? '레디 완료' : '레디 해제', 1.0);
+        }
+      }
+    } catch (err) {
+      showToast(err.message || '레디 처리 실패', 1.4);
+    }
+  }
+
+  async function leaveRoomFromLobby() {
+    if (!state.multiplayer.lobbyActive || !state.multiplayer.roomCode || !state.playerId) {
+      return;
+    }
+    const roomCode = state.multiplayer.roomCode;
+    resetMultiplayerState(true);
+    try {
+      await leaveRoomOnServer(state.playerId, roomCode);
+      showToast('방에서 나갔습니다', 1.1);
+    } catch (err) {
+      showToast('방 나가기 요청 실패', 1.1);
+    }
+  }
+
+  async function pollRoomState(dt, force = false) {
+    const shouldPollLobby = state.inLobby && state.multiplayer.lobbyActive;
+    const shouldPollGame = !state.inLobby && state.multiplayer.active;
+    if (!shouldPollLobby && !shouldPollGame) return;
+    if (!state.playerId || !state.multiplayer.roomCode) return;
+
+    if (!force) {
+      const wsFresh = state.multiplayer.wsConnected
+        && (Date.now() - (state.multiplayer.wsLastMessageAt || 0) < 2800);
+      const interval = shouldPollLobby
+        ? (wsFresh ? ROOM_POLL_INTERVAL_LOBBY_WS : ROOM_POLL_INTERVAL_LOBBY)
+        : (wsFresh ? ROOM_POLL_INTERVAL_GAME_WS : ROOM_POLL_INTERVAL_GAME);
+      state.multiplayer.pollTimer -= dt;
+      if (state.multiplayer.pollTimer > 0) return;
+      state.multiplayer.pollTimer = interval;
+    }
+
+    if (state.multiplayer.pollBusy) return;
+    state.multiplayer.pollBusy = true;
+
+    try {
+      const data = await fetchRoomStateOnServer(state.playerId, state.multiplayer.roomCode);
+      if (!data || !data.room) return;
+      syncRoomSnapshot(data.room);
+
+      if (data.room.status === 'started' && state.inLobby) {
+        startMultiplayerGameFromRoom(data.room);
+        return;
+      }
+
+      if (data.room.status === 'failed') {
+        if (!state.inLobby && state.multiplayer.active) {
+          if (state.phase !== PHASE_GAMEOVER || gameOverOverlayEl.classList.contains('hidden')) {
+            showToast('협동 방 패배: 팀 커맨드 센터 붕괴', 1.9);
+            enterGameOver();
+          }
+        } else if (state.inLobby) {
+          const roomCode = state.multiplayer.roomCode;
+          showToast('방이 종료되었습니다', 1.4);
+          resetMultiplayerState();
+          if (roomCode) {
+            leaveRoomOnServer(state.playerId, roomCode).catch(() => {});
+          }
+        }
+      }
+    } catch (err) {
+      if (!state.inLobby && state.multiplayer.active) {
+        // ignore transient polling errors in game
+        return;
+      }
+      showToast('방 상태 조회 실패', 1.2);
+    } finally {
+      state.multiplayer.pollBusy = false;
     }
   }
 
@@ -855,6 +1733,188 @@
 
   function worldToTileY(y) {
     return Math.floor(y / TILE);
+  }
+
+  function isMultiplayerActive() {
+    return !!state.multiplayer.active;
+  }
+
+  function isAuthorityClient() {
+    if (!isMultiplayerActive()) return true;
+    return state.multiplayer.slot === 0;
+  }
+
+  function isLocalOwnerSlot(ownerSlot) {
+    if (!isMultiplayerActive()) return true;
+    if (!Number.isInteger(ownerSlot)) return true;
+    return ownerSlot === state.multiplayer.slot;
+  }
+
+  function getOwnedBuildingColor(baseColor, ownerSlot, flash = 0) {
+    if (flash > 0) return '#f8ffff';
+    if (!isMultiplayerActive()) return baseColor;
+    if (!Number.isInteger(ownerSlot)) return baseColor;
+    return isLocalOwnerSlot(ownerSlot) ? OWNER_LOCAL_BUILD_TINT : OWNER_REMOTE_BUILD_TINT;
+  }
+
+  function getOwnedUnitColor(ownerSlot, localColor, remoteColor) {
+    if (!isMultiplayerActive()) return localColor;
+    if (!Number.isInteger(ownerSlot)) return localColor;
+    return isLocalOwnerSlot(ownerSlot) ? localColor : remoteColor;
+  }
+
+  function smoothRemotePlayer(dt) {
+    if (!isMultiplayerActive()) return;
+    const rp = state.multiplayer.remotePlayer;
+    if (!rp.online) {
+      rp.drawX = 0;
+      rp.drawY = 0;
+      rp.drawFacing = 0;
+      return;
+    }
+
+    const tx = Number(rp.x) || 0;
+    const ty = Number(rp.y) || 0;
+    const tf = Number(rp.facing) || 0;
+    if (tx <= 0 && ty <= 0) return;
+
+    if (rp.drawX <= 0 && rp.drawY <= 0) {
+      rp.drawX = tx;
+      rp.drawY = ty;
+      rp.drawFacing = tf;
+      return;
+    }
+
+    const d2v = dist2(rp.drawX, rp.drawY, tx, ty);
+    if (d2v > 220 * 220) {
+      rp.drawX = tx;
+      rp.drawY = ty;
+      rp.drawFacing = tf;
+      return;
+    }
+
+    const alpha = clamp(dt * 18, 0.08, 0.55);
+    rp.drawX = lerp(rp.drawX, tx, alpha);
+    rp.drawY = lerp(rp.drawY, ty, alpha);
+    rp.drawFacing = lerpAngle(rp.drawFacing || 0, tf, clamp(dt * 14, 0.06, 0.5));
+  }
+
+  function findBuildingByOwnerAndTile(ownerSlot, type, c, r) {
+    for (let i = 0; i < buildings.length; i += 1) {
+      const b = buildings[i];
+      if (b.ownerSlot !== ownerSlot) continue;
+      if (b.type !== type) continue;
+      if (b.c !== c || b.r !== r) continue;
+      return b;
+    }
+    return null;
+  }
+
+  function syncRemoteMemberStateIntoAuthorityWorld() {
+    if (!isMultiplayerActive() || !isAuthorityClient()) return;
+    if (!state.multiplayer.active) return;
+    const remote = (state.multiplayer.players || []).find((p) => p && p.playerId && p.playerId !== state.playerId) || null;
+    if (!remote) return;
+
+    const remoteSlot = Number(remote.slot);
+    if (!Number.isInteger(remoteSlot)) return;
+    applyReportedOwnerEconomy(remoteSlot, remote.resources, remote.totalMineralsEarned);
+
+    const remoteBuildings = Array.isArray(remote.buildings) ? remote.buildings : [];
+    for (let i = 0; i < remoteBuildings.length; i += 1) {
+      const rb = remoteBuildings[i];
+      if (!rb || typeof rb !== 'object') continue;
+
+      const type = typeof rb.type === 'string' ? rb.type : '';
+      const def = BUILD_TYPES[type];
+      if (!def) continue;
+
+      const c = Math.floor(Number(rb.c) || 0);
+      const r = Math.floor(Number(rb.r) || 0);
+      if (!inBounds(c, r)) continue;
+
+      const level = Math.max(1, Math.floor(Number(rb.level) || 1));
+      let b = findBuildingByOwnerAndTile(remoteSlot, type, c, r);
+      if (!b) {
+        b = addBuilding(type, c, r, level, {
+          ownerSlot: remoteSlot,
+          isMainCommand: !!rb.isMainCommand,
+        });
+        if (!b) continue;
+      } else if (level > b.level) {
+        b.level = level;
+        b.maxHp = getBuildingMaxHp(b.type, b.level);
+        b.hp = clamp(b.hp, 0, b.maxHp);
+      }
+      if (rb.isMainCommand) {
+        b.isMainCommand = true;
+      }
+
+      const hp = Number(rb.hp);
+      if (Number.isFinite(hp) && hp > b.hp) {
+        b.hp = clamp(hp, 0, b.maxHp);
+      }
+    }
+
+    const remoteUnits = Array.isArray(remote.units) ? remote.units : [];
+    for (let i = 0; i < remoteUnits.length; i += 1) {
+      const ru = remoteUnits[i];
+      if (!ru || typeof ru !== 'object') continue;
+      const kind = ru.kind || '';
+      const x = Number(ru.x) || 0;
+      const y = Number(ru.y) || 0;
+      if (x <= 0 && y <= 0) continue;
+
+      if (kind === 'miniScv') {
+        let best = null;
+        let bestD2 = 14 * 14;
+        for (let m = 0; m < miniScvs.length; m += 1) {
+          const scv = miniScvs[m];
+          if (scv.ownerSlot !== remoteSlot) continue;
+          const d2v = dist2(scv.x, scv.y, x, y);
+          if (d2v < bestD2) {
+            bestD2 = d2v;
+            best = scv;
+          }
+        }
+
+        if (!best) {
+          miniScvs.push({
+            id: nextUnitId += 1,
+            entityKind: 'miniScv',
+            team: TEAM_FRIENDLY,
+            x,
+            y,
+            r: Math.max(2, Number(ru.r) || 8),
+            baseSpeed: MINI_SCV_BASE_SPEED,
+            baseDamage: MINI_SCV_BASE_DAMAGE,
+            baseDefense: 0,
+            baseMaxHp: MINI_SCV_BASE_MAX_HP,
+            defense: 0,
+            maxHp: Math.max(1, Number(ru.maxHp) || MINI_SCV_BASE_MAX_HP),
+            hp: Math.max(0, Number(ru.hp) || MINI_SCV_BASE_MAX_HP),
+            flash: 0,
+            facingAngle: Number(ru.facing) || 0,
+            mode: 'search',
+            targetMineralId: 0,
+            carry: 0,
+            mineProgress: 0,
+            returnCommandId: 0,
+            ownerSlot: remoteSlot,
+            stuckTimer: 0,
+            repathFail: 0,
+            idleSearchTimer: 0,
+            failedMineralId: 0,
+            failedMineralCd: 0,
+            lastX: x,
+            lastY: y,
+            path: [],
+            pathIndex: 0,
+            repathCd: 0,
+          });
+        }
+      }
+    }
   }
 
   function visibleWorldRect() {
@@ -930,7 +1990,11 @@
     }
   }
 
-  function generateMapTerrain() {
+  function generateMapTerrain(seed = 1) {
+    const mapRand = createSeededRng(seed);
+    const mapRange = (min, max) => min + mapRand() * (max - min);
+    const mapInt = (min, max) => Math.floor(mapRange(min, max + 1));
+
     terrainBlocked.fill(0);
     discovered.fill(0);
 
@@ -943,7 +2007,7 @@
         }
         const noise = (Math.sin(c * 0.31) + Math.cos(r * 0.27)) * 0.03;
         const chance = 0.105 + noise;
-        terrainBlocked[toIndex(c, r)] = Math.random() < chance ? 1 : 0;
+        terrainBlocked[toIndex(c, r)] = mapRand() < chance ? 1 : 0;
       }
     }
 
@@ -978,10 +2042,10 @@
     clearTerrainCircle(midC, midR, 8);
 
     for (let i = 0; i < 14; i += 1) {
-      const cx = randInt(5, MAP_COLS - 6);
-      const cy = randInt(5, MAP_ROWS - 6);
-      const rw = randInt(2, 4);
-      const rh = randInt(2, 4);
+      const cx = mapInt(5, MAP_COLS - 6);
+      const cy = mapInt(5, MAP_ROWS - 6);
+      const rw = mapInt(2, 4);
+      const rh = mapInt(2, 4);
       for (let r = cy; r < cy + rh; r += 1) {
         for (let c = cx; c < cx + rw; c += 1) {
           if (inBounds(c, r)) terrainBlocked[toIndex(c, r)] = 1;
@@ -992,7 +2056,11 @@
     clearTerrainCircle(midC, midR, 8);
   }
 
-  function generateMinerals() {
+  function generateMinerals(seed = 1) {
+    const mineralRand = createSeededRng(seed);
+    const mineralRange = (min, max) => min + mineralRand() * (max - min);
+    const mineralInt = (min, max) => Math.floor(mineralRange(min, max + 1));
+
     minerals.length = 0;
 
     const centerX = WORLD_W * 0.5;
@@ -1005,8 +2073,8 @@
     while (created < 165 && tries < 10000) {
       tries += 1;
 
-      const c = randInt(2, MAP_COLS - 3);
-      const r = randInt(2, MAP_ROWS - 3);
+      const c = mineralInt(2, MAP_COLS - 3);
+      const r = mineralInt(2, MAP_ROWS - 3);
       if (terrainAt(c, r)) continue;
 
       const x = tileCenterX(c);
@@ -1027,7 +2095,7 @@
 
       const norm = clamp(dToCenter / maxDist, 0, 1);
       const difficulty = 1 + norm * 2.7;
-      const total = Math.floor(120 + norm * 360 + Math.random() * 110);
+      const total = Math.floor(120 + norm * 360 + mineralRand() * 110);
       const chunk = Math.floor(9 + norm * 16);
 
       minerals.push({
@@ -1047,7 +2115,8 @@
     }
   }
 
-  function markSpecialMineralChunk(commandCenter) {
+  function markSpecialMineralChunk(commandCenter, seed = 1) {
+    const pickRand = createSeededRng(seed);
     if (!commandCenter || minerals.length === 0) return;
 
     for (let i = 0; i < minerals.length; i += 1) {
@@ -1071,7 +2140,7 @@
     }
     if (candidates.length === 0) return;
 
-    const chosen = candidates[randInt(0, candidates.length - 1)];
+    const chosen = candidates[Math.floor(pickRand() * candidates.length)];
     chosen.special = true;
     chosen.radius = Math.max(chosen.radius, SPECIAL_MINERAL_RADIUS_MIN);
     chosen.total = Math.max(1, Math.floor(chosen.total * SPECIAL_MINERAL_TOTAL_MUL + SPECIAL_MINERAL_TOTAL_BONUS));
@@ -1101,6 +2170,7 @@
       spawnCd: type === 'barracks' ? getBarracksConfig(level).interval : randRange(2, 4),
       hologram: 0,
       isMainCommand: !!options.isMainCommand,
+      ownerSlot: Number.isInteger(options.ownerSlot) ? options.ownerSlot : null,
     };
 
     b.hp = b.maxHp;
@@ -1145,12 +2215,36 @@
     return buildings.filter((b) => b.type === 'command');
   }
 
-  function getNearestCommandCenter(x, y) {
+  function getMainCommandCenter(ownerSlot = null) {
+    for (let i = 0; i < buildings.length; i += 1) {
+      const b = buildings[i];
+      if (b.type !== 'command') continue;
+      if (!b.isMainCommand) continue;
+      if (ownerSlot !== null && Number.isInteger(b.ownerSlot) && b.ownerSlot !== ownerSlot) continue;
+      return b;
+    }
+    return null;
+  }
+
+  function getLocalMainCommandCenter() {
+    if (!isMultiplayerActive()) return getMainCommandCenter(null) || state.commandCenter;
+    return getMainCommandCenter(state.multiplayer.slot)
+      || getNearestCommandCenter(state.player.x, state.player.y, state.multiplayer.slot)
+      || state.commandCenter;
+  }
+
+  function getLocalCommandCenter() {
+    if (!isMultiplayerActive()) return state.commandCenter;
+    return getNearestCommandCenter(state.player.x, state.player.y, state.multiplayer.slot) || state.commandCenter;
+  }
+
+  function getNearestCommandCenter(x, y, ownerSlot = null) {
     let best = null;
     let bestD2 = Infinity;
     for (let i = 0; i < buildings.length; i += 1) {
       const b = buildings[i];
       if (b.type !== 'command') continue;
+      if (ownerSlot !== null && b.ownerSlot !== null && b.ownerSlot !== ownerSlot) continue;
       const bp = getBuildingCenter(b);
       const d2v = dist2(x, y, bp.x, bp.y);
       if (d2v < bestD2) {
@@ -1182,13 +2276,53 @@
     }
   }
 
-  function recalcPopulationLimit() {
-    const supplyCount = buildings.filter((b) => b.type === 'supply').length;
-    state.populationLimit = BASE_POPULATION + state.extraPop + supplyCount * SUPPLY_POP_BONUS;
+  function resolvePopulationOwnerSlot(ownerSlot) {
+    if (!isMultiplayerActive()) return null;
+    if (ownerSlot === null) return null;
+    if (Number.isInteger(ownerSlot)) return ownerSlot;
+    return state.multiplayer.slot;
   }
 
-  function getPopulationUsed() {
-    return soldiers.length + miniScvs.length;
+  function getPopulationLimit(ownerSlot = undefined) {
+    const slot = resolvePopulationOwnerSlot(ownerSlot);
+    let supplyCount = 0;
+    for (let i = 0; i < buildings.length; i += 1) {
+      const b = buildings[i];
+      if (b.type !== 'supply') continue;
+      if (slot === null) {
+        supplyCount += 1;
+      } else if (!Number.isInteger(b.ownerSlot)) {
+        if (slot === state.multiplayer.slot) supplyCount += 1;
+      } else if (b.ownerSlot === slot) {
+        supplyCount += 1;
+      }
+    }
+    return BASE_POPULATION + state.extraPop + supplyCount * SUPPLY_POP_BONUS;
+  }
+
+  function recalcPopulationLimit() {
+    state.populationLimit = getPopulationLimit();
+    return state.populationLimit;
+  }
+
+  function getPopulationUsed(ownerSlot = undefined) {
+    const slot = resolvePopulationOwnerSlot(ownerSlot);
+    let count = 0;
+    for (let i = 0; i < soldiers.length; i += 1) {
+      const s = soldiers[i];
+      const sOwner = Number.isInteger(s.ownerSlot)
+        ? s.ownerSlot
+        : (isMultiplayerActive() ? state.multiplayer.slot : null);
+      if (slot === null || sOwner === slot) count += 1;
+    }
+    for (let i = 0; i < miniScvs.length; i += 1) {
+      const u = miniScvs[i];
+      const uOwner = Number.isInteger(u.ownerSlot)
+        ? u.ownerSlot
+        : (isMultiplayerActive() ? state.multiplayer.slot : null);
+      if (slot === null || uOwner === slot) count += 1;
+    }
+    return count;
   }
 
   function getAttackMultiplier() {
@@ -1225,35 +2359,20 @@
     return base + bonus;
   }
 
-  function getWaveExponentialGrowth(wave) {
-    const startWave = Number.isFinite(WAVE_EXP_GROWTH_START_WAVE) ? WAVE_EXP_GROWTH_START_WAVE : 1;
-    const inputScale = Math.max(0, Number.isFinite(WAVE_EXP_GROWTH_INPUT_SCALE) ? WAVE_EXP_GROWTH_INPUT_SCALE : 0.62);
-    const growthPower = Math.max(0, Number.isFinite(WAVE_EXP_GROWTH_POWER) ? WAVE_EXP_GROWTH_POWER : 1.42);
-    const growthN = Math.max(0, wave - startWave);
-    return Math.pow(1 + growthN * inputScale, growthPower) - 1;
-  }
-
   function getWaveEnemyStatScale(wave) {
     const ease = getWaveEaseMultiplier(wave);
-    const growth = getWaveExponentialGrowth(wave);
-    const baseScale = wave * ENEMY_SCALE_PER_WAVE * (ENEMY_SCALE_EASE_BASE + ease * ENEMY_SCALE_EASE_WEIGHT);
-    const growthMul = 1 + growth * Math.max(0, WAVE_EXP_ENEMY_STAT_WEIGHT);
-    return 1 + baseScale * growthMul;
+    return 1 + wave * ENEMY_SCALE_PER_WAVE * (ENEMY_SCALE_EASE_BASE + ease * ENEMY_SCALE_EASE_WEIGHT);
   }
 
   function getWaveSpawnConfig(wave) {
     const ease = getWaveEaseMultiplier(wave);
-    const growth = getWaveExponentialGrowth(wave);
     const baseTotal = Math.floor(WAVE_SPAWN_TOTAL_BASE + wave * WAVE_SPAWN_TOTAL_PER_WAVE);
     const baseInterval = Math.max(WAVE_SPAWN_INTERVAL_MIN, WAVE_SPAWN_INTERVAL_BASE - wave * WAVE_SPAWN_INTERVAL_PER_WAVE);
     const baseBurst = Math.min(WAVE_SPAWN_BURST_MAX, WAVE_SPAWN_BURST_BASE + Math.floor(wave / WAVE_SPAWN_BURST_STEP_WAVE));
 
-    const totalGrowthMul = 1 + growth * Math.max(0, WAVE_EXP_SPAWN_TOTAL_WEIGHT);
-    const total = Math.max(WAVE_SPAWN_TOTAL_MIN, Math.floor(baseTotal * ease * totalGrowthMul));
-
-    const intervalGrowthDiv = 1 + growth * Math.max(0, WAVE_EXP_SPAWN_INTERVAL_WEIGHT);
-    const intervalBase = baseInterval * (1 + (1 - ease) * WAVE_SPAWN_INTERVAL_EASE_PENALTY);
-    const interval = Math.max(WAVE_SPAWN_INTERVAL_FLOOR, intervalBase / intervalGrowthDiv);
+    const coopMul = isMultiplayerActive() ? Math.max(1, Number(WAVE_COOP_ENEMY_TOTAL_MULT) || 1) : 1;
+    const total = Math.max(WAVE_SPAWN_TOTAL_MIN, Math.floor(baseTotal * ease * coopMul));
+    const interval = Math.max(WAVE_SPAWN_INTERVAL_FLOOR, baseInterval * (1 + (1 - ease) * WAVE_SPAWN_INTERVAL_EASE_PENALTY));
 
     let burst = Math.max(1, Math.round(baseBurst * (WAVE_SPAWN_BURST_EASE_BASE + ease * WAVE_SPAWN_BURST_EASE_WEIGHT)));
     burst = Math.min(baseBurst, burst);
@@ -1504,6 +2623,13 @@
     state.keys = Object.create(null);
 
     state.commandCenter = null;
+    if (isMultiplayerActive()) {
+      resetOwnerEconomy();
+      syncLocalEconomyToOwnerSlot();
+      state.multiplayer.pollTimer = 0;
+      state.multiplayer.heartbeatTimer = 0;
+      state.multiplayer.failureNotified = false;
+    }
 
     state.player.baseSpeed = PLAYER_BASE_SPEED;
     state.player.baseDamage = PLAYER_BASE_DAMAGE;
@@ -1518,16 +2644,46 @@
     state.player.dustCd = 0;
     state.player.facingAngle = 0;
 
-    generateMapTerrain();
-    generateMinerals();
+    state.worldSeed = isMultiplayerActive()
+      ? Math.max(1, Number(state.multiplayer.seed) || 1)
+      : Math.max(1, (Date.now() ^ Math.floor(Math.random() * 2147483646)) & 0x7fffffff);
 
-    const midC = Math.floor(MAP_COLS / 2) - 1;
+    generateMapTerrain(state.worldSeed);
+    generateMinerals(state.worldSeed + 9973);
+
     const midR = Math.floor(MAP_ROWS / 2) - 1;
+    if (isMultiplayerActive()) {
+      const centerC = Math.floor(MAP_COLS / 2);
+      const leftC = centerC - 3;
+      const rightC = centerC;
 
-    addBuilding('command', midC, midR, 1, { isMainCommand: true });
-    markSpecialMineralChunk(state.commandCenter);
-    state.player.x = tileCenterX(midC + 1);
-    state.player.y = tileCenterY(midR + 3);
+      clearTerrainRect(leftC - 4, midR - 4, 12, 10);
+
+      const localSlot = state.multiplayer.slot === 1 ? 1 : 0;
+      const localC = localSlot === 1 ? rightC : leftC;
+      addBuilding('command', localC, midR, 1, {
+        isMainCommand: true,
+        ownerSlot: localSlot,
+      });
+
+      const localCommand = state.commandCenter || getNearestCommandCenter(state.player.x, state.player.y, localSlot);
+      markSpecialMineralChunk(localCommand, state.worldSeed + 19937);
+
+      if (localCommand) {
+        const cp = getBuildingCenter(localCommand);
+        state.player.x = cp.x;
+        state.player.y = cp.y + TILE * 2;
+      } else {
+        state.player.x = tileCenterX(localC + 1);
+        state.player.y = tileCenterY(midR + 3);
+      }
+    } else {
+      const midC = Math.floor(MAP_COLS / 2) - 1;
+      addBuilding('command', midC, midR, 1, { isMainCommand: true, ownerSlot: null });
+      markSpecialMineralChunk(state.commandCenter, state.worldSeed + 19937);
+      state.player.x = tileCenterX(midC + 1);
+      state.player.y = tileCenterY(midR + 3);
+    }
 
     revealAround(state.player.x, state.player.y, VISION_RADIUS_PLAYER + 2);
 
@@ -1556,6 +2712,30 @@
         if (dc * dc + dr * dr > rr) continue;
         discovered[toIndex(c, r)] = 1;
       }
+    }
+  }
+
+  function syncSharedFogOfWar() {
+    if (!isMultiplayerActive()) return;
+
+    const players = Array.isArray(state.multiplayer.players) ? state.multiplayer.players : [];
+    for (let i = 0; i < players.length; i += 1) {
+      const p = players[i];
+      if (!p || p.online === false) continue;
+      const px = Number(p.x) || 0;
+      const py = Number(p.y) || 0;
+      if (px <= 0 && py <= 0) continue;
+      revealAround(px, py, VISION_RADIUS_PLAYER);
+    }
+
+    for (let i = 0; i < miniScvs.length; i += 1) {
+      const u = miniScvs[i];
+      revealAround(u.x, u.y, VISION_RADIUS_UNIT);
+    }
+
+    for (let i = 0; i < soldiers.length; i += 1) {
+      const s = soldiers[i];
+      revealAround(s.x, s.y, VISION_RADIUS_UNIT);
     }
   }
 
@@ -1609,7 +2789,32 @@
     return dx * dx + dy * dy <= cr * cr;
   }
 
-  function canCircleMove(x, y, r) {
+  function intersectsRemoteUnitCircle(x, y, r) {
+    if (!isMultiplayerActive()) return false;
+
+    if (state.multiplayer.remotePlayerId && state.multiplayer.remotePlayer.online) {
+      const rp = state.multiplayer.remotePlayer;
+      const rr = state.player.r + 1;
+      if ((rp.x > 0 || rp.y > 0) && dist2(x, y, rp.x, rp.y) <= (r + rr) * (r + rr)) {
+        return true;
+      }
+    }
+
+    const units = Array.isArray(state.multiplayer.remoteUnits) ? state.multiplayer.remoteUnits : [];
+    for (let i = 0; i < units.length; i += 1) {
+      const u = units[i];
+      const ur = Math.max(2, Number(u.r) || 8) + 1;
+      const ux = Number(u.x) || 0;
+      const uy = Number(u.y) || 0;
+      if (ux <= 0 && uy <= 0) continue;
+      if (dist2(x, y, ux, uy) <= (r + ur) * (r + ur)) {
+        return true;
+      }
+    }
+    return false;
+  }
+
+  function canCircleMove(x, y, r, mover = null) {
     const minC = worldToTileX(x - r);
     const maxC = worldToTileX(x + r);
     const minR = worldToTileY(y - r);
@@ -1638,6 +2843,25 @@
       }
     }
 
+    const isLocalFriendlyMover = !!mover
+      && mover.team === TEAM_FRIENDLY
+      && (
+        mover.entityKind === 'player'
+        || !Number.isInteger(mover.ownerSlot)
+        || mover.ownerSlot === state.multiplayer.slot
+      );
+    if (isLocalFriendlyMover && hasRemoteBuildingOverlapTiles(
+      worldToTileX(x - r),
+      worldToTileY(y - r),
+      Math.max(1, Math.ceil((r * 2) / TILE)),
+      Math.max(1, Math.ceil((r * 2) / TILE)),
+    )) {
+      return false;
+    }
+    if (isLocalFriendlyMover && mover.entityKind !== 'miniScv' && intersectsRemoteUnitCircle(x, y, r)) {
+      return false;
+    }
+
     return true;
   }
 
@@ -1645,10 +2869,10 @@
     const nx = entity.x + vx * dt;
     const ny = entity.y + vy * dt;
 
-    if (canCircleMove(nx, entity.y, entity.r)) {
+    if (canCircleMove(nx, entity.y, entity.r, entity)) {
       entity.x = nx;
     }
-    if (canCircleMove(entity.x, ny, entity.r)) {
+    if (canCircleMove(entity.x, ny, entity.r, entity)) {
       entity.y = ny;
     }
 
@@ -1699,6 +2923,561 @@
       if (circleRectIntersect(s.x, s.y, s.r + 1, rx, ry, rw, rh)) return true;
     }
     return false;
+  }
+
+  function hasRemoteBuildingOverlapTiles(c, r, w, h) {
+    if (!isMultiplayerActive()) return false;
+    const list = Array.isArray(state.multiplayer.remoteBuildings) ? state.multiplayer.remoteBuildings : [];
+    const aL = c;
+    const aT = r;
+    const aR = c + w - 1;
+    const aB = r + h - 1;
+    for (let i = 0; i < list.length; i += 1) {
+      const b = list[i];
+      const bw = Math.max(1, Number(b.w) || 1);
+      const bh = Math.max(1, Number(b.h) || 1);
+      const bL = Number(b.c) || 0;
+      const bT = Number(b.r) || 0;
+      const bR = bL + bw - 1;
+      const bB = bT + bh - 1;
+      if (aL <= bR && aR >= bL && aT <= bB && aB >= bT) {
+        return true;
+      }
+    }
+    return false;
+  }
+
+  function hasRemoteUnitOverlapRect(rx, ry, rw, rh) {
+    if (!isMultiplayerActive()) return false;
+    if (state.multiplayer.remotePlayerId && state.multiplayer.remotePlayer.online) {
+      const rp = state.multiplayer.remotePlayer;
+      if ((rp.x > 0 || rp.y > 0) && circleRectIntersect(rp.x, rp.y, state.player.r + 1, rx, ry, rw, rh)) {
+        return true;
+      }
+    }
+    const units = Array.isArray(state.multiplayer.remoteUnits) ? state.multiplayer.remoteUnits : [];
+    for (let i = 0; i < units.length; i += 1) {
+      const u = units[i];
+      const ur = Math.max(2, Number(u.r) || 8);
+      if (circleRectIntersect(Number(u.x) || 0, Number(u.y) || 0, ur + 1, rx, ry, rw, rh)) {
+        return true;
+      }
+    }
+    return false;
+  }
+
+  function collectLocalSharedBuildings() {
+    if (!isMultiplayerActive()) return [];
+    const ownSlot = state.multiplayer.slot;
+    const out = [];
+    for (let i = 0; i < buildings.length; i += 1) {
+      const b = buildings[i];
+      if (b.ownerSlot !== ownSlot) continue;
+      out.push({
+        type: b.type,
+        c: b.c,
+        r: b.r,
+        w: b.w,
+        h: b.h,
+        level: b.level,
+        hp: Math.max(0, Math.floor(b.hp)),
+        maxHp: Math.max(0, Math.floor(b.maxHp)),
+        ownerSlot: Number.isInteger(b.ownerSlot) ? b.ownerSlot : ownSlot,
+        isMainCommand: !!b.isMainCommand,
+      });
+      if (out.length >= 220) break;
+    }
+    return out;
+  }
+
+  function collectLocalSharedUnits() {
+    if (!isMultiplayerActive()) return [];
+    const out = [];
+    const ownSlot = state.multiplayer.slot;
+    for (let i = 0; i < miniScvs.length; i += 1) {
+      const u = miniScvs[i];
+      if (u.ownerSlot !== null && u.ownerSlot !== ownSlot) continue;
+      out.push({
+        kind: 'miniScv',
+        x: u.x,
+        y: u.y,
+        r: u.r,
+        facing: u.facingAngle || 0,
+        hp: Math.max(0, Math.floor(u.hp)),
+        maxHp: Math.max(0, Math.floor(u.maxHp)),
+        ownerSlot: Number.isInteger(u.ownerSlot) ? u.ownerSlot : ownSlot,
+      });
+      if (out.length >= 420) return out;
+    }
+    for (let i = 0; i < soldiers.length; i += 1) {
+      const u = soldiers[i];
+      if (u.ownerSlot !== null && u.ownerSlot !== ownSlot) continue;
+      out.push({
+        kind: 'soldier',
+        x: u.x,
+        y: u.y,
+        r: u.r,
+        facing: u.facingAngle || 0,
+        hp: Math.max(0, Math.floor(u.hp)),
+        maxHp: Math.max(0, Math.floor(u.maxHp)),
+        ownerSlot: Number.isInteger(u.ownerSlot) ? u.ownerSlot : ownSlot,
+      });
+      if (out.length >= 420) break;
+    }
+    return out;
+  }
+
+  function collectResourcesBySlotMap() {
+    if (!isMultiplayerActive()) return null;
+    syncLocalEconomyToOwnerSlot();
+    const map = {};
+    for (let slot = 0; slot <= 1; slot += 1) {
+      const eco = ensureOwnerEconomy(slot);
+      map[String(slot)] = Math.max(0, Math.floor(eco ? eco.resources : START_RESOURCES));
+    }
+    return map;
+  }
+
+  function collectTotalMineralsBySlotMap() {
+    if (!isMultiplayerActive()) return null;
+    syncLocalEconomyToOwnerSlot();
+    const map = {};
+    for (let slot = 0; slot <= 1; slot += 1) {
+      const eco = ensureOwnerEconomy(slot);
+      map[String(slot)] = Math.max(0, Math.floor(eco ? eco.totalMineralsEarned : 0));
+    }
+    return map;
+  }
+
+  function collectPopulationLimitBySlotMap() {
+    if (!isMultiplayerActive()) return null;
+    const map = {};
+    for (let slot = 0; slot <= 1; slot += 1) {
+      map[String(slot)] = Math.max(0, Math.floor(getPopulationLimit(slot)));
+    }
+    return map;
+  }
+
+  function collectPopulationUsedBySlotMap() {
+    if (!isMultiplayerActive()) return null;
+    const map = {};
+    for (let slot = 0; slot <= 1; slot += 1) {
+      map[String(slot)] = Math.max(0, Math.floor(getPopulationUsed(slot)));
+    }
+    return map;
+  }
+
+  function collectAuthoritativeWorldSnapshot() {
+    if (!isMultiplayerActive() || !isAuthorityClient()) return null;
+
+    const resourcesBySlot = collectResourcesBySlotMap();
+    const totalMineralsBySlot = collectTotalMineralsBySlotMap();
+    const populationLimitBySlot = collectPopulationLimitBySlotMap();
+    const populationUsedBySlot = collectPopulationUsedBySlotMap();
+    const worldState = {
+      wave: state.wave,
+      phase: state.phase,
+      phaseTimer: state.phaseTimer,
+      runTime: state.runTime,
+      killCount: state.killCount,
+      totalMineralsEarned: state.totalMineralsEarned,
+      resources: state.resources,
+      resourcesBySlot,
+      totalMineralsBySlot,
+      populationLimitBySlot,
+      populationUsedBySlot,
+      waveSpawnRemain: state.waveSpawnRemain,
+      waveSpawnTotal: state.waveSpawnTotal,
+      spawnCooldown: state.spawnCooldown,
+      spawnInterval: state.spawnInterval,
+      spawnBurst: state.spawnBurst,
+      bossSpawned: state.bossSpawned,
+    };
+
+    const worldBuildings = [];
+    for (let i = 0; i < buildings.length; i += 1) {
+      const b = buildings[i];
+      worldBuildings.push({
+        id: b.id,
+        type: b.type,
+        c: b.c,
+        r: b.r,
+        w: b.w,
+        h: b.h,
+        level: b.level,
+        hp: Math.max(0, Math.floor(b.hp)),
+        maxHp: Math.max(0, Math.floor(b.maxHp)),
+        ownerSlot: Number.isInteger(b.ownerSlot) ? b.ownerSlot : null,
+        isMainCommand: !!b.isMainCommand,
+      });
+      if (worldBuildings.length >= 340) break;
+    }
+
+    const worldEnemies = [];
+    for (let i = 0; i < enemies.length; i += 1) {
+      const e = enemies[i];
+      worldEnemies.push({
+        id: e.id,
+        type: e.type,
+        x: e.x,
+        y: e.y,
+        r: e.r,
+        hp: Math.max(0, Math.floor(e.hp)),
+        maxHp: Math.max(0, Math.floor(e.maxHp)),
+        attackCd: e.attackCd,
+        specialCd: e.specialCd,
+        dashCd: e.dashCd,
+        dashTimer: e.dashTimer,
+        wallTargetId: e.wallTargetId || 0,
+        repathCd: e.repathCd || 0,
+        flash: e.flash || 0,
+      });
+      if (worldEnemies.length >= 680) break;
+    }
+
+    const worldUnits = [];
+    for (let i = 0; i < miniScvs.length; i += 1) {
+      const u = miniScvs[i];
+      worldUnits.push({
+        kind: 'miniScv',
+        x: u.x,
+        y: u.y,
+        r: u.r,
+        facing: u.facingAngle || 0,
+        hp: Math.max(0, Math.floor(u.hp)),
+        maxHp: Math.max(0, Math.floor(u.maxHp)),
+        ownerSlot: Number.isInteger(u.ownerSlot) ? u.ownerSlot : state.multiplayer.slot,
+      });
+      if (worldUnits.length >= 420) break;
+    }
+    for (let i = 0; i < soldiers.length && worldUnits.length < 420; i += 1) {
+      const u = soldiers[i];
+      worldUnits.push({
+        kind: 'soldier',
+        x: u.x,
+        y: u.y,
+        r: u.r,
+        facing: u.facingAngle || 0,
+        hp: Math.max(0, Math.floor(u.hp)),
+        maxHp: Math.max(0, Math.floor(u.maxHp)),
+        ownerSlot: Number.isInteger(u.ownerSlot) ? u.ownerSlot : state.multiplayer.slot,
+      });
+    }
+
+    const worldMinerals = [];
+    for (let i = 0; i < minerals.length; i += 1) {
+      const m = minerals[i];
+      worldMinerals.push({
+        id: m.id,
+        c: m.c,
+        r: m.r,
+        x: m.x,
+        y: m.y,
+        radius: m.radius,
+        total: Math.max(0, Math.floor(m.total)),
+        chunk: Math.max(1, Math.floor(m.chunk)),
+        difficulty: m.difficulty,
+        flash: m.flash || 0,
+        special: !!m.special,
+      });
+      if (worldMinerals.length >= 500) break;
+    }
+
+    const worldProjectiles = [];
+    for (let i = 0; i < projectiles.length; i += 1) {
+      const p = projectiles[i];
+      worldProjectiles.push({
+        x: p.x,
+        y: p.y,
+        vx: p.vx,
+        vy: p.vy,
+        damage: p.damage,
+        team: p.team,
+        color: p.color,
+        radius: p.radius,
+        life: p.life,
+        ownerSlot: Number.isInteger(p.ownerSlot) ? p.ownerSlot : null,
+      });
+      if (worldProjectiles.length >= 1100) break;
+    }
+
+    return {
+      state: worldState,
+      buildings: worldBuildings,
+      enemies: worldEnemies,
+      units: worldUnits,
+      minerals: worldMinerals,
+      projectiles: worldProjectiles,
+    };
+  }
+
+  function applySharedWorldSnapshot(world) {
+    if (!world || typeof world !== 'object') return;
+    const prevPhase = state.phase;
+    const ws = world.state && typeof world.state === 'object' ? world.state : {};
+
+    if (Number.isFinite(ws.wave)) state.wave = Math.max(1, Math.floor(ws.wave));
+    if (typeof ws.phase === 'string') state.phase = ws.phase;
+    if (Number.isFinite(ws.phaseTimer)) state.phaseTimer = Math.max(0, Number(ws.phaseTimer));
+    if (Number.isFinite(ws.runTime)) state.runTime = Math.max(0, Number(ws.runTime));
+    if (Number.isFinite(ws.killCount)) state.killCount = Math.max(0, Math.floor(ws.killCount));
+    if (Number.isFinite(ws.totalMineralsEarned) && !isMultiplayerActive()) {
+      state.totalMineralsEarned = Math.max(0, Math.floor(ws.totalMineralsEarned));
+    }
+    if (isMultiplayerActive() && ws.resourcesBySlot && typeof ws.resourcesBySlot === 'object') {
+      const localKey = String(state.multiplayer.slot);
+      for (let slot = 0; slot <= 1; slot += 1) {
+        const key = String(slot);
+        const resVal = Number(ws.resourcesBySlot[key]);
+        const totalMap = ws.totalMineralsBySlot && typeof ws.totalMineralsBySlot === 'object'
+          ? ws.totalMineralsBySlot
+          : null;
+        const totalVal = totalMap ? Number(totalMap[key]) : NaN;
+        setOwnerEconomy(slot, Number.isFinite(resVal) ? resVal : null, Number.isFinite(totalVal) ? totalVal : null);
+      }
+      const localRes = Number(ws.resourcesBySlot[localKey]);
+      if (Number.isFinite(localRes)) state.resources = Math.max(0, Math.floor(localRes));
+      if (ws.totalMineralsBySlot && typeof ws.totalMineralsBySlot === 'object') {
+        const localTotal = Number(ws.totalMineralsBySlot[localKey]);
+        if (Number.isFinite(localTotal)) state.totalMineralsEarned = Math.max(0, Math.floor(localTotal));
+      }
+    } else if (Number.isFinite(ws.resources) && !isMultiplayerActive()) {
+      state.resources = Math.max(0, Math.floor(ws.resources));
+    }
+    if (Number.isFinite(ws.waveSpawnRemain)) state.waveSpawnRemain = Math.max(0, Math.floor(ws.waveSpawnRemain));
+    if (Number.isFinite(ws.waveSpawnTotal)) state.waveSpawnTotal = Math.max(0, Math.floor(ws.waveSpawnTotal));
+    if (Number.isFinite(ws.spawnCooldown)) state.spawnCooldown = Math.max(0, Number(ws.spawnCooldown));
+    if (Number.isFinite(ws.spawnInterval)) state.spawnInterval = Math.max(0.01, Number(ws.spawnInterval));
+    if (Number.isFinite(ws.spawnBurst)) state.spawnBurst = Math.max(1, Math.floor(ws.spawnBurst));
+    if ('bossSpawned' in ws) state.bossSpawned = !!ws.bossSpawned;
+
+    const worldBuildings = Array.isArray(world.buildings) ? world.buildings : [];
+    buildings.length = 0;
+    buildingsById.clear();
+    let localMainCommand = null;
+    let localOwnedCommand = null;
+    let anyCommand = null;
+    let maxBuildingId = 1;
+    for (let i = 0; i < worldBuildings.length; i += 1) {
+      const sb = worldBuildings[i];
+      const def = BUILD_TYPES[sb.type] || BUILD_TYPES.wall;
+      const id = Math.max(1, Number(sb.id) || (i + 1));
+      const level = Math.max(1, Number(sb.level) || 1);
+      const w = Math.max(1, Number(sb.w) || def.w || 1);
+      const h = Math.max(1, Number(sb.h) || def.h || 1);
+      const hp = Math.max(0, Number(sb.hp) || 0);
+      const maxHp = Math.max(1, Number(sb.maxHp) || getBuildingMaxHp(sb.type, level));
+      const ownerSlot = Number.isInteger(sb.ownerSlot) ? sb.ownerSlot : null;
+      const b = {
+        id,
+        entityKind: 'building',
+        team: TEAM_FRIENDLY,
+        type: sb.type,
+        c: Math.floor(Number(sb.c) || 0),
+        r: Math.floor(Number(sb.r) || 0),
+        w,
+        h,
+        level,
+        maxHp,
+        hp: Math.min(maxHp, hp),
+        defense: 0,
+        flash: Number(sb.flash) || 0,
+        shootCd: 0,
+        spawnCd: sb.type === 'barracks' ? getBarracksConfig(level).interval : 0,
+        hologram: 0,
+        isMainCommand: !!sb.isMainCommand,
+        ownerSlot,
+      };
+      buildings.push(b);
+      buildingsById.set(b.id, b);
+      maxBuildingId = Math.max(maxBuildingId, b.id + 1);
+      if (b.type === 'command') {
+        anyCommand = anyCommand || b;
+        if (ownerSlot === state.multiplayer.slot) {
+          localOwnedCommand = localOwnedCommand || b;
+          if (b.isMainCommand) localMainCommand = localMainCommand || b;
+        } else if (!isMultiplayerActive() && b.isMainCommand) {
+          localMainCommand = localMainCommand || b;
+        }
+      }
+    }
+    nextBuildingId = Math.max(nextBuildingId, maxBuildingId);
+    state.commandCenter = localMainCommand || localOwnedCommand || anyCommand;
+    rebuildBuildingTileMap();
+
+    const shouldSyncMinerals = true;
+    if (shouldSyncMinerals) {
+      const worldMinerals = Array.isArray(world.minerals) ? world.minerals : [];
+      minerals.length = 0;
+      let maxMineralId = 1;
+      for (let i = 0; i < worldMinerals.length; i += 1) {
+        const sm = worldMinerals[i];
+        const id = Math.max(1, Number(sm.id) || (i + 1));
+        minerals.push({
+          id,
+          c: Math.floor(Number(sm.c) || 0),
+          r: Math.floor(Number(sm.r) || 0),
+          x: Number(sm.x) || 0,
+          y: Number(sm.y) || 0,
+          radius: Math.max(1, Number(sm.radius) || 8),
+          total: Math.max(0, Math.floor(Number(sm.total) || 0)),
+          chunk: Math.max(1, Math.floor(Number(sm.chunk) || 1)),
+          difficulty: Math.max(0.1, Number(sm.difficulty) || 1),
+          flash: Math.max(0, Number(sm.flash) || 0),
+          special: !!sm.special,
+        });
+        maxMineralId = Math.max(maxMineralId, id + 1);
+      }
+      nextMineralId = Math.max(nextMineralId, maxMineralId);
+    }
+
+    const worldEnemies = Array.isArray(world.enemies) ? world.enemies : [];
+    enemies.length = 0;
+    let maxEnemyId = 1;
+    for (let i = 0; i < worldEnemies.length; i += 1) {
+      const se = worldEnemies[i];
+      const type = se.type || 'grunt';
+      const typeDef = ENEMY_TYPES[type] || ENEMY_TYPES.grunt;
+      const id = Math.max(1, Number(se.id) || (i + 1));
+      enemies.push({
+        id,
+        entityKind: 'enemy',
+        team: TEAM_ENEMY,
+        type,
+        x: Number(se.x) || 0,
+        y: Number(se.y) || 0,
+        r: Math.max(2, Number(se.r) || 10),
+        baseSpeed: Number(typeDef.speed) || 64,
+        speed: Number(typeDef.speed) || 64,
+        damage: Number(typeDef.damage) || 20,
+        defense: 0,
+        maxHp: Math.max(1, Number(se.maxHp) || 1),
+        hp: Math.max(0, Number(se.hp) || 0),
+        flash: Math.max(0, Number(se.flash) || 0),
+        attackRange: Number(typeDef.attackRange) || 18,
+        shootRange: Number(typeDef.shootRange) || 0,
+        attackCd: Math.max(0, Number(se.attackCd) || 0),
+        specialCd: Math.max(0, Number(se.specialCd) || 0),
+        dashCd: Math.max(0, Number(se.dashCd) || 0),
+        dashTimer: Math.max(0, Number(se.dashTimer) || 0),
+        path: [],
+        pathIndex: 0,
+        repathCd: Math.max(0, Number(se.repathCd) || 0),
+        wallTargetId: Math.max(0, Number(se.wallTargetId) || 0),
+      });
+      maxEnemyId = Math.max(maxEnemyId, id + 1);
+    }
+    nextEnemyId = Math.max(nextEnemyId, maxEnemyId);
+
+    const worldUnits = Array.isArray(world.units) ? world.units : [];
+    soldiers.length = 0;
+    miniScvs.length = 0;
+    for (let i = 0; i < worldUnits.length; i += 1) {
+      const su = worldUnits[i];
+      const kind = su.kind || '';
+      if (kind === 'miniScv') {
+        const ownerSlot = Number.isInteger(su.ownerSlot) ? su.ownerSlot : null;
+        miniScvs.push({
+          id: nextUnitId += 1,
+          entityKind: 'miniScv',
+          team: TEAM_FRIENDLY,
+          x: Number(su.x) || 0,
+          y: Number(su.y) || 0,
+          r: Math.max(2, Number(su.r) || 8),
+          baseSpeed: MINI_SCV_BASE_SPEED,
+          baseDamage: MINI_SCV_BASE_DAMAGE,
+          baseDefense: 0,
+          baseMaxHp: MINI_SCV_BASE_MAX_HP,
+          defense: 0,
+          maxHp: Math.max(1, Number(su.maxHp) || 1),
+          hp: Math.max(0, Number(su.hp) || 0),
+          flash: 0,
+          facingAngle: Number(su.facing) || 0,
+          mode: 'search',
+          targetMineralId: 0,
+          carry: 0,
+          mineProgress: 0,
+          returnCommandId: 0,
+          ownerSlot,
+          stuckTimer: 0,
+          repathFail: 0,
+          idleSearchTimer: 0,
+          failedMineralId: 0,
+          failedMineralCd: 0,
+          lastX: Number(su.x) || 0,
+          lastY: Number(su.y) || 0,
+          path: [],
+          pathIndex: 0,
+          repathCd: 0,
+        });
+      } else if (kind === 'soldier') {
+        const sx = Number(su.x) || 0;
+        const sy = Number(su.y) || 0;
+        const ownerSlot = Number.isInteger(su.ownerSlot) ? su.ownerSlot : null;
+        soldiers.push({
+          id: nextUnitId += 1,
+          entityKind: 'soldier',
+          team: TEAM_FRIENDLY,
+          x: sx,
+          y: sy,
+          r: Math.max(2, Number(su.r) || 8),
+          level: 1,
+          sourceBarracksId: 0,
+          baseSpeed: SOLDIER_BASE_SPEED,
+          baseDamage: SOLDIER_BASE_DAMAGE,
+          baseDefense: 0,
+          baseMaxHp: Math.max(1, Number(su.maxHp) || SOLDIER_BASE_MAX_HP),
+          defense: 0,
+          maxHp: Math.max(1, Number(su.maxHp) || SOLDIER_BASE_MAX_HP),
+          hp: Math.max(0, Number(su.hp) || SOLDIER_BASE_MAX_HP),
+          range: SOLDIER_BASE_RANGE,
+          shootCd: 0.2,
+          targetId: 0,
+          flash: 0,
+          homeX: sx,
+          homeY: sy,
+          facingAngle: Number(su.facing) || 0,
+          ownerSlot,
+        });
+      }
+    }
+
+    const worldProjectiles = Array.isArray(world.projectiles) ? world.projectiles : [];
+    projectiles.length = 0;
+    for (let i = 0; i < worldProjectiles.length; i += 1) {
+      const sp = worldProjectiles[i];
+      projectiles.push({
+        x: Number(sp.x) || 0,
+        y: Number(sp.y) || 0,
+        vx: Number(sp.vx) || 0,
+        vy: Number(sp.vy) || 0,
+        damage: Math.max(0, Number(sp.damage) || 0),
+        team: sp.team === TEAM_ENEMY ? TEAM_ENEMY : TEAM_FRIENDLY,
+        color: typeof sp.color === 'string' ? sp.color : '#ffffff',
+        radius: Math.max(1, Number(sp.radius) || 2),
+        life: Math.max(0, Number(sp.life) || 0.2),
+        ownerSlot: Number.isInteger(sp.ownerSlot) ? sp.ownerSlot : null,
+      });
+    }
+
+    recalcPopulationLimit();
+    if (isMultiplayerActive() && ws.populationLimitBySlot && typeof ws.populationLimitBySlot === 'object') {
+      const limit = Number(ws.populationLimitBySlot[String(state.multiplayer.slot)]);
+      if (Number.isFinite(limit)) {
+        state.populationLimit = Math.max(BASE_POPULATION, Math.floor(limit));
+      }
+    }
+    if (isMultiplayerActive() && state.phase === PHASE_REWARD && prevPhase !== PHASE_REWARD) {
+      state.multiplayer.rewardChosen = false;
+    }
+    if (state.phase === PHASE_REWARD && prevPhase !== PHASE_REWARD && state.cardOptions.length === 0) {
+      openCardOverlay(drawCardChoices());
+    } else if (state.phase !== PHASE_REWARD && prevPhase === PHASE_REWARD && state.cardOptions.length > 0) {
+      closeCardOverlay();
+    }
+    if (state.phase === PHASE_GAMEOVER && gameOverOverlayEl.classList.contains('hidden')) {
+      enterGameOver();
+    }
   }
 
   function ejectMiniScvsFromBuilding(building) {
@@ -1873,8 +3652,8 @@
     return result;
   }
 
-  function getCommandApproachTiles() {
-    return getApproachTilesForBuilding(state.commandCenter, true);
+  function getCommandApproachTiles(commandTarget = null) {
+    return getApproachTilesForBuilding(commandTarget || state.commandCenter, true);
   }
 
   function getNearestApproachPoint(building, fromX, fromY) {
@@ -1900,11 +3679,11 @@
     return { c: best.c, r: best.r, x: tileCenterX(best.c), y: tileCenterY(best.r) };
   }
 
-  function findEnemyPath(enemy, mode) {
+  function findEnemyPath(enemy, mode, commandTarget = null) {
     const sc = worldToTileX(enemy.x);
     const sr = worldToTileY(enemy.y);
 
-    const approaches = getCommandApproachTiles();
+    const approaches = getCommandApproachTiles(commandTarget);
     if (approaches.length === 0) return null;
 
     let bestPath = null;
@@ -2071,7 +3850,7 @@
     });
   }
 
-  function damageTarget(target, rawDamage) {
+  function damageTarget(target, rawDamage, sourceOwnerSlot = null) {
     if (!target) return;
     if (target.hp <= 0) return;
 
@@ -2094,7 +3873,7 @@
       const idx = enemies.indexOf(target);
       if (idx >= 0) enemies.splice(idx, 1);
       state.killCount += 1;
-      gainResources(ENEMY_KILL_REWARD);
+      gainResources(ENEMY_KILL_REWARD, sourceOwnerSlot);
       addPopup(target.x, target.y - 14, `+${ENEMY_KILL_REWARD}`, '#87ff9d');
       addDebris(target.x, target.y, 12);
       if (Math.random() < ENEMY_DEATH_EXPLODE_CHANCE) {
@@ -2120,7 +3899,8 @@
     }
 
     if (target.entityKind === 'player') {
-      state.resources = Math.max(0, state.resources - PLAYER_DEATH_PENALTY);
+      const penalty = Math.min(getOwnerResources(), PLAYER_DEATH_PENALTY);
+      if (penalty > 0) spendResources(penalty);
       target.hp = Math.max(1, Math.round(target.maxHp * 0.65));
       if (state.commandCenter) {
         const cc = getBuildingCenter(state.commandCenter);
@@ -2142,10 +3922,13 @@
       }
       playSfx('explode');
 
-      const wasMainCommand = target === state.commandCenter;
+      const destroyedMainCommand = target.type === 'command' && !!target.isMainCommand;
       removeBuilding(target);
 
-      if (wasMainCommand) {
+      if (isMultiplayerActive() && destroyedMainCommand) {
+        reportRoomFailure('command_destroyed');
+        enterGameOver();
+      } else if (destroyedMainCommand) {
         enterGameOver();
       }
     }
@@ -2211,7 +3994,7 @@
     }
   }
 
-  function spawnProjectile(x, y, tx, ty, speed, damage, team, color, radius = 3, life = 2.2) {
+  function spawnProjectile(x, y, tx, ty, speed, damage, team, color, radius = 3, life = 2.2, ownerSlot = null) {
     let dx = tx - x;
     let dy = ty - y;
     const len = Math.hypot(dx, dy) || 1;
@@ -2228,13 +4011,15 @@
       color,
       radius,
       life,
+      ownerSlot: Number.isInteger(ownerSlot) ? ownerSlot : null,
     });
   }
 
   function spawnSoldierFromBarracks(b) {
     const config = getBarracksConfig(b.level);
-    const pop = getPopulationUsed();
-    if (pop >= state.populationLimit) return;
+    const ownerSlot = isMultiplayerActive() ? b.ownerSlot : null;
+    const pop = getPopulationUsed(ownerSlot);
+    if (pop >= getPopulationLimit(ownerSlot)) return;
     if (countSoldiersByBarracks(b.id) >= config.maxUnits) return;
 
     const level = b.level;
@@ -2265,6 +4050,9 @@
       flash: 0,
       homeX: x,
       homeY: y,
+      ownerSlot: Number.isInteger(b.ownerSlot)
+        ? b.ownerSlot
+        : (isMultiplayerActive() ? state.multiplayer.slot : null),
     };
 
     soldiers.push(s);
@@ -2297,9 +4085,12 @@
   }
 
   function spawnMiniScv(sourceCommandCenter = null) {
-    const pop = getPopulationUsed();
-    if (pop >= state.populationLimit) return;
-    const commandCenter = sourceCommandCenter || getNearestCommandCenter(state.player.x, state.player.y) || state.commandCenter;
+    const ownerSlot = isMultiplayerActive() ? state.multiplayer.slot : null;
+    const pop = getPopulationUsed(ownerSlot);
+    if (pop >= getPopulationLimit(ownerSlot)) return;
+    const commandCenter = sourceCommandCenter
+      || getNearestCommandCenter(state.player.x, state.player.y, isMultiplayerActive() ? state.multiplayer.slot : null)
+      || state.commandCenter;
     if (!commandCenter) return;
 
     const cc = getBuildingCenter(commandCenter);
@@ -2328,8 +4119,12 @@
       carry: 0,
       mineProgress: 0,
       returnCommandId: commandCenter.id,
+      ownerSlot,
       stuckTimer: 0,
       repathFail: 0,
+      idleSearchTimer: 0,
+      failedMineralId: 0,
+      failedMineralCd: 0,
       lastX: spawnPos.x,
       lastY: spawnPos.y,
 
@@ -2346,18 +4141,22 @@
     if (state.phase === PHASE_GAMEOVER) return;
     if (isFriendlyOverlayOpen()) return;
 
-    const command = getNearestCommandCenter(state.player.x, state.player.y) || state.commandCenter;
+    const command = getNearestCommandCenter(
+      state.player.x,
+      state.player.y,
+      isMultiplayerActive() ? state.multiplayer.slot : null,
+    ) || state.commandCenter;
     if (!command) {
       showToast('커맨드 센터가 필요합니다', 1.2);
       return;
     }
 
-    if (getPopulationUsed() >= state.populationLimit) {
+    if (getPopulationUsed() >= getPopulationLimit()) {
       showToast('인구가 가득 찼습니다', 1.2);
       return;
     }
 
-    if (state.resources < MANUAL_WORKER_COST) {
+    if (getOwnerResources() < MANUAL_WORKER_COST) {
       showToast(`미네랄이 부족합니다 (필요: ${MANUAL_WORKER_COST})`, 1.2);
       return;
     }
@@ -2367,6 +4166,7 @@
     showToast('미니 SCV 생산 완료', 1.2);
     playSfx('build');
     updateHud();
+    triggerImmediateHeartbeat();
   }
 
   function findMineralById(id) {
@@ -2393,7 +4193,7 @@
     return best;
   }
 
-  function pickReachableMineral(x, y, maxChecks = 8) {
+  function pickReachableMineral(x, y, maxChecks = 8, skipId = 0) {
     const sc = worldToTileX(x);
     const sr = worldToTileY(y);
 
@@ -2401,6 +4201,7 @@
     for (let i = 0; i < minerals.length; i += 1) {
       const m = minerals[i];
       if (m.total <= 0) continue;
+      if (skipId && m.id === skipId) continue;
       candidates.push({ m, d2: dist2(x, y, m.x, m.y) });
     }
     if (candidates.length === 0) return null;
@@ -2435,6 +4236,21 @@
 
   function updateMiniScvPathTo(scv, tx, ty) {
     return updateMiniScvPathToTile(scv, worldToTileX(tx), worldToTileY(ty));
+  }
+
+  function resetMiniScvPathState(scv) {
+    scv.path = [];
+    scv.pathIndex = 0;
+    scv.repathCd = 0;
+    scv.repathFail = 0;
+    scv.stuckTimer = 0;
+  }
+
+  function tryNudgeMiniScvOut(scv) {
+    const pos = findFreePositionAround(scv.x, scv.y, scv.r, 6, 26, 26);
+    scv.x = pos.x;
+    scv.y = pos.y;
+    resetMiniScvPathState(scv);
   }
 
   function followTilePath(entity, speed, dt) {
@@ -2498,38 +4314,23 @@
     return Math.round(base * (BUILDING_UPGRADE_COST_BASE + building.level * BUILDING_UPGRADE_COST_PER_LEVEL));
   }
 
-  function getDynamicBuildCost(type) {
-    const def = BUILD_TYPES[type];
-    if (!def) return 0;
-    if (type !== 'supply') return def.cost;
-
-    let builtSupplyCount = 0;
-    for (let i = 0; i < buildings.length; i += 1) {
-      if (buildings[i].type === 'supply') builtSupplyCount += 1;
-    }
-
-    const expPerBuilt = Math.max(1, Number.isFinite(SUPPLY_COST_EXP_PER_BUILT) ? SUPPLY_COST_EXP_PER_BUILT : 1.18);
-    const flatPerBuilt = Math.max(0, Number.isFinite(SUPPLY_COST_FLAT_PER_BUILT) ? SUPPLY_COST_FLAT_PER_BUILT : 0);
-    return Math.round(def.cost * Math.pow(expPerBuilt, builtSupplyCount) + builtSupplyCount * flatPerBuilt);
-  }
-
   function validateBuildPlacement(type, c, r) {
     const def = BUILD_TYPES[type];
     if (!def) {
       return { valid: false, reason: 'invalid', cost: 0, upgradeTarget: null };
     }
-    const buildCost = getDynamicBuildCost(type);
+    const baseCost = def.cost;
 
     const centerX = (c + def.w * 0.5) * TILE;
     const centerY = (r + def.h * 0.5) * TILE;
 
     const distToPlayer = dist(state.player.x, state.player.y, centerX, centerY);
     if (distToPlayer > BUILD_RANGE) {
-      return { valid: false, reason: 'range', cost: buildCost, upgradeTarget: null };
+      return { valid: false, reason: 'range', cost: baseCost, upgradeTarget: null };
     }
 
     if (!inBounds(c, r) || !inBounds(c + def.w - 1, r + def.h - 1)) {
-      return { valid: false, reason: 'bounds', cost: buildCost, upgradeTarget: null };
+      return { valid: false, reason: 'bounds', cost: baseCost, upgradeTarget: null };
     }
 
     const placeX = c * TILE;
@@ -2537,10 +4338,16 @@
     const placeW = def.w * TILE;
     const placeH = def.h * TILE;
     if (circleRectIntersect(state.player.x, state.player.y, state.player.r + 2, placeX, placeY, placeW, placeH)) {
-      return { valid: false, reason: 'playerOverlap', cost: buildCost, upgradeTarget: null };
+      return { valid: false, reason: 'playerOverlap', cost: baseCost, upgradeTarget: null };
     }
     if (hasFriendlyUnitOverlapRect(placeX, placeY, placeW, placeH)) {
-      return { valid: false, reason: 'unitOverlap', cost: buildCost, upgradeTarget: null };
+      return { valid: false, reason: 'unitOverlap', cost: baseCost, upgradeTarget: null };
+    }
+    if (hasRemoteUnitOverlapRect(placeX, placeY, placeW, placeH)) {
+      return { valid: false, reason: 'allyUnitOverlap', cost: baseCost, upgradeTarget: null };
+    }
+    if (hasRemoteBuildingOverlapTiles(c, r, def.w, def.h)) {
+      return { valid: false, reason: 'allyBuildingOverlap', cost: baseCost, upgradeTarget: null };
     }
 
     const touchedIds = new Set();
@@ -2551,12 +4358,12 @@
         const tr = r + ry;
 
         if (terrainAt(tc, tr)) {
-          return { valid: false, reason: 'blocked', cost: buildCost, upgradeTarget: null };
+          return { valid: false, reason: 'blocked', cost: baseCost, upgradeTarget: null };
         }
 
         const mineral = getMineralAtTile(tc, tr);
         if (mineral && mineral.total > 0) {
-          return { valid: false, reason: 'mineral', cost: buildCost, upgradeTarget: null };
+          return { valid: false, reason: 'mineral', cost: baseCost, upgradeTarget: null };
         }
 
         const existing = getBuildingAtTile(tc, tr);
@@ -2567,7 +4374,7 @@
     }
 
     if (touchedIds.size === 0) {
-      return { valid: true, reason: 'ok', cost: buildCost, upgradeTarget: null };
+      return { valid: true, reason: 'ok', cost: baseCost, upgradeTarget: null };
     }
 
     if (touchedIds.size === 1) {
@@ -2578,7 +4385,8 @@
         type === 'turret' &&
         target.level < 3 &&
         target.c === c &&
-        target.r === r
+        target.r === r &&
+        (!isMultiplayerActive() || target.ownerSlot === null || target.ownerSlot === state.multiplayer.slot)
       ) {
         return {
           valid: true,
@@ -2589,7 +4397,7 @@
       }
     }
 
-    return { valid: false, reason: 'overlap', cost: buildCost, upgradeTarget: null };
+    return { valid: false, reason: 'overlap', cost: baseCost, upgradeTarget: null };
   }
 
   function tryBuildAtPointer() {
@@ -2610,6 +4418,12 @@
         playSfx('error');
       } else if (preview.reason === 'range') {
         showToast('메인 SCV 주변에서만 건설 가능합니다', 1.2);
+        playSfx('error');
+      } else if (preview.reason === 'allyBuildingOverlap') {
+        showToast('팀원의 건물 위에는 건설할 수 없습니다', 1.3);
+        playSfx('error');
+      } else if (preview.reason === 'allyUnitOverlap') {
+        showToast('팀원의 유닛 위에는 건설할 수 없습니다', 1.3);
         playSfx('error');
       } else if (preview.reason === 'mineral') {
         showToast('미네랄 위에는 건설할 수 없습니다', 1.2);
@@ -2635,7 +4449,9 @@
       b.flash = 0.2;
       showToast(`${BUILD_TYPES[b.type].name} Lv.${b.level} 업그레이드`, 1.3);
     } else {
-      const newBuilding = addBuilding(preview.type, preview.c, preview.r, 1);
+      const newBuilding = addBuilding(preview.type, preview.c, preview.r, 1, {
+        ownerSlot: isMultiplayerActive() ? state.multiplayer.slot : null,
+      });
       if (newBuilding) {
         if (newBuilding.type === 'upgrade') {
           showToast('업그레이드 타워 가동 준비 완료', 1.4);
@@ -2647,6 +4463,7 @@
 
     playSfx('build');
     updateHud();
+    triggerImmediateHeartbeat();
   }
 
   function setBuildModeBySlot(slot) {
@@ -2801,6 +4618,7 @@
     playSfx('build');
     renderBarracksOverlay();
     updateHud();
+    triggerImmediateHeartbeat();
   }
 
   function renderUpgradeButtons() {
@@ -2837,6 +4655,7 @@
         playSfx('build');
         renderUpgradeButtons();
         updateHud();
+        triggerImmediateHeartbeat();
       });
 
       upgradeListEl.appendChild(btn);
@@ -2869,8 +4688,27 @@
     state.cardOptions = [];
   }
 
+  function areAllPlayersRewardChosen() {
+    if (!isMultiplayerActive()) return true;
+    const players = Array.isArray(state.multiplayer.players) ? state.multiplayer.players : [];
+    const activePlayers = players.filter((p) => p && p.online !== false);
+    if (activePlayers.length <= 1) return true;
+    return activePlayers.every((p) => !!p.rewardChosen);
+  }
+
+  function advanceWaveAfterRewardChoice() {
+    state.multiplayer.rewardChosen = false;
+    state.wave += 1;
+    state.phase = PHASE_BUILD;
+    state.phaseTimer = getWaveBuildDuration(state.wave);
+    showBanner(`WAVE ${state.wave} 준비`, 1.6);
+    updateHud();
+    triggerImmediateHeartbeat();
+  }
+
   function chooseCard(index) {
     if (state.phase !== PHASE_REWARD) return;
+    if (isMultiplayerActive() && state.multiplayer.rewardChosen) return;
     const card = state.cardOptions[index];
     if (!card) return;
 
@@ -2881,10 +4719,20 @@
     closeCardOverlay();
     closeUpgradeOverlay();
 
+    if (isMultiplayerActive()) {
+      state.multiplayer.rewardChosen = true;
+      if (!isAuthorityClient() || !areAllPlayersRewardChosen()) {
+        triggerImmediateHeartbeat();
+        updateHud();
+        return;
+      }
+      advanceWaveAfterRewardChoice();
+      return;
+    }
+
     state.wave += 1;
     state.phase = PHASE_BUILD;
     state.phaseTimer = getWaveBuildDuration(state.wave);
-
     showBanner(`WAVE ${state.wave} 준비`, 1.6);
     updateHud();
   }
@@ -2949,21 +4797,26 @@
 
       if (state.waveSpawnRemain <= 0 && enemies.length === 0) {
         state.phase = PHASE_REWARD;
+        state.multiplayer.rewardChosen = false;
         const cards = drawCardChoices();
         openCardOverlay(cards);
         showBanner(`WAVE ${state.wave} 완료`, 1.6);
         playSfx('card');
+        triggerImmediateHeartbeat();
       }
 
       if (state.phaseTimer <= 0 && state.waveSpawnRemain <= 0 && enemies.length === 0) {
         state.phase = PHASE_REWARD;
+        state.multiplayer.rewardChosen = false;
         openCardOverlay(drawCardChoices());
+        triggerImmediateHeartbeat();
       }
     }
   }
 
   function updatePlayer(dt) {
     const p = state.player;
+    const canInteractWorld = true;
 
     p.flash = Math.max(0, p.flash - dt * 1.9);
 
@@ -2984,10 +4837,17 @@
       p.mineTargetId = 0;
       p.mineProgress = 0;
     } else {
-      updatePlayerMiningAndRepair(dt);
+      if (canInteractWorld) {
+        updatePlayerMiningAndRepair(dt);
+      } else {
+        p.mineTargetId = 0;
+        p.mineProgress = 0;
+      }
     }
 
-    pushEnemiesAwayFromScv(p, dt, 1.25);
+    if (canInteractWorld && (!isMultiplayerActive() || isAuthorityClient())) {
+      pushEnemiesAwayFromScv(p, dt, 1.25);
+    }
     revealAround(p.x, p.y, VISION_RADIUS_PLAYER);
   }
 
@@ -3073,7 +4933,7 @@
         if (target && b.shootCd <= 0) {
           b.shootCd = Math.max(0.22, 0.74 - b.level * 0.09);
           const damage = Math.round((16 + (b.level - 1) * 11) * getAttackMultiplier() * (1 + state.bonuses.turretDamage));
-          spawnProjectile(center.x, center.y, target.x, target.y, 320, damage, TEAM_FRIENDLY, '#ffdc8e', 3, 1.35);
+          spawnProjectile(center.x, center.y, target.x, target.y, 320, damage, TEAM_FRIENDLY, '#ffdc8e', 3, 1.35, b.ownerSlot);
           playSfx('shot');
         }
       }
@@ -3082,7 +4942,10 @@
         const config = getBarracksConfig(b.level);
         b.spawnCd -= dt;
         if (b.spawnCd <= 0) {
-          if (getPopulationUsed() < state.populationLimit && countSoldiersByBarracks(b.id) < config.maxUnits) {
+          const ownerSlot = isMultiplayerActive() ? b.ownerSlot : null;
+          const popUsed = getPopulationUsed(ownerSlot);
+          const popLimit = getPopulationLimit(ownerSlot);
+          if (popUsed < popLimit && countSoldiersByBarracks(b.id) < config.maxUnits) {
             spawnSoldierFromBarracks(b);
           }
           b.spawnCd = Math.max(8, config.interval * (1 - state.bonuses.barracksRate * 0.5));
@@ -3099,24 +4962,40 @@
 
       const speed = scv.baseSpeed * getSpeedMultiplier();
       scv.repathCd = Math.max(0, scv.repathCd - dt);
+      scv.failedMineralCd = Math.max(0, Number(scv.failedMineralCd || 0) - dt);
+      if (scv.failedMineralCd <= 0) scv.failedMineralId = 0;
 
       if (scv.carry > 0 && scv.mode !== 'toBase') {
         scv.mode = 'toBase';
         scv.targetMineralId = 0;
-        scv.path = [];
-        scv.pathIndex = 0;
-        scv.repathCd = 0;
-        scv.stuckTimer = 0;
+        resetMiniScvPathState(scv);
       }
 
       if (scv.mode === 'search') {
-        const target = pickReachableMineral(scv.x, scv.y, 12);
+        scv.idleSearchTimer = (scv.idleSearchTimer || 0) + dt;
+        const skipId = scv.failedMineralCd > 0 ? scv.failedMineralId : 0;
+        const target = pickReachableMineral(scv.x, scv.y, 12, skipId);
         if (!target) {
           scv.targetMineralId = 0;
-          scv.path = [];
-          scv.pathIndex = 0;
+          resetMiniScvPathState(scv);
+          const home = getNearestCommandCenter(
+            scv.x,
+            scv.y,
+            scv.ownerSlot !== null ? scv.ownerSlot : (isMultiplayerActive() ? state.multiplayer.slot : null),
+          ) || state.commandCenter;
+          if (home && scv.idleSearchTimer > 0.18) {
+            const ap = getNearestApproachPoint(home, scv.x, scv.y);
+            const dHome = dist(scv.x, scv.y, ap.x, ap.y);
+            if (dHome > 0.001) {
+              const dxHome = (ap.x - scv.x) / dHome;
+              const dyHome = (ap.y - scv.y) / dHome;
+              scv.facingAngle = Math.atan2(dyHome, dxHome);
+              moveEntityWithCollision(scv, dxHome * speed * 0.65, dyHome * speed * 0.65, dt);
+            }
+          }
           continue;
         }
+        scv.idleSearchTimer = 0;
         scv.targetMineralId = target.id;
         scv.mode = 'toMineral';
         scv.repathCd = 0;
@@ -3148,9 +5027,18 @@
           if (!ok) {
             scv.repathFail += 1;
             if (scv.repathFail > 5) {
-              scv.mode = 'search';
+              scv.failedMineralId = scv.targetMineralId;
+              scv.failedMineralCd = 3.2;
+              scv.mode = 'toBase';
               scv.targetMineralId = 0;
+              const retreat = getNearestCommandCenter(
+                scv.x,
+                scv.y,
+                scv.ownerSlot !== null ? scv.ownerSlot : (isMultiplayerActive() ? state.multiplayer.slot : null),
+              ) || state.commandCenter;
+              scv.returnCommandId = retreat ? retreat.id : 0;
               scv.repathFail = 0;
+              resetMiniScvPathState(scv);
               continue;
             }
           } else {
@@ -3176,6 +5064,9 @@
         const progress = dist(scv.x, scv.y, prevX, prevY);
         if (moved && progress < 0.3) scv.stuckTimer += dt;
         else scv.stuckTimer = Math.max(0, scv.stuckTimer - dt * 1.4);
+        if (scv.stuckTimer > 1.55) {
+          tryNudgeMiniScvOut(scv);
+        }
       } else if (scv.mode === 'mining') {
         const mineral = findMineralById(scv.targetMineralId);
         if (!mineral || mineral.total <= 0) {
@@ -3198,13 +5089,13 @@
           mineral.total -= gain;
           scv.carry = gain;
           scv.mode = 'toBase';
-          const returnCommand = getNearestCommandCenter(scv.x, scv.y) || state.commandCenter;
+          const returnCommand = getNearestCommandCenter(
+            scv.x,
+            scv.y,
+            scv.ownerSlot !== null ? scv.ownerSlot : (isMultiplayerActive() ? state.multiplayer.slot : null),
+          ) || state.commandCenter;
           scv.returnCommandId = returnCommand ? returnCommand.id : 0;
-          scv.path = [];
-          scv.pathIndex = 0;
-          scv.repathCd = 0;
-          scv.repathFail = 0;
-          scv.stuckTimer = 0;
+          resetMiniScvPathState(scv);
 
           if (mineral.total <= 0) {
             const idx = minerals.indexOf(mineral);
@@ -3212,30 +5103,29 @@
           }
         }
       } else if (scv.mode === 'toBase') {
-        const returnCommand = buildingsById.get(scv.returnCommandId) || getNearestCommandCenter(scv.x, scv.y) || state.commandCenter;
+        const returnCommand = buildingsById.get(scv.returnCommandId) || getNearestCommandCenter(
+          scv.x,
+          scv.y,
+          scv.ownerSlot !== null ? scv.ownerSlot : (isMultiplayerActive() ? state.multiplayer.slot : null),
+        ) || state.commandCenter;
         if (!returnCommand) {
           scv.mode = 'search';
           scv.targetMineralId = 0;
-          scv.path = [];
-          scv.pathIndex = 0;
+          resetMiniScvPathState(scv);
           continue;
         }
 
         const cp = getBuildingCenter(returnCommand);
         if (dist(scv.x, scv.y, cp.x, cp.y) < 28 || isEntityNearBuildingDock(scv, returnCommand, 10)) {
           if (scv.carry > 0) {
-            gainResources(scv.carry);
+            gainResources(scv.carry, scv.ownerSlot);
             addPopup(scv.x, scv.y - 10, `+${scv.carry}`, '#f5dc74');
             scv.carry = 0;
             playSfx('mine');
           }
           scv.mode = 'search';
           scv.targetMineralId = 0;
-          scv.path = [];
-          scv.pathIndex = 0;
-          scv.repathCd = 0;
-          scv.repathFail = 0;
-          scv.stuckTimer = 0;
+          resetMiniScvPathState(scv);
           continue;
         }
 
@@ -3246,8 +5136,7 @@
           if (!ok) {
             scv.repathFail += 1;
             if (scv.repathFail > 7) {
-              scv.path = [];
-              scv.pathIndex = 0;
+              tryNudgeMiniScvOut(scv);
               scv.repathCd = 0.12;
               scv.repathFail = 0;
             }
@@ -3274,6 +5163,9 @@
         const progress = dist(scv.x, scv.y, prevX, prevY);
         if (moved && progress < 0.3) scv.stuckTimer += dt;
         else scv.stuckTimer = Math.max(0, scv.stuckTimer - dt * 1.4);
+        if (scv.stuckTimer > 1.55) {
+          tryNudgeMiniScvOut(scv);
+        }
       }
     }
   }
@@ -3307,7 +5199,7 @@
         if (d <= s.range && s.shootCd <= 0) {
           s.shootCd = SOLDIER_SHOOT_CD;
           const damage = Math.round(s.baseDamage * getAttackMultiplier());
-          spawnProjectile(s.x, s.y, target.x, target.y, 260, damage, TEAM_FRIENDLY, '#9fd8ff', 3, 1.4);
+          spawnProjectile(s.x, s.y, target.x, target.y, 260, damage, TEAM_FRIENDLY, '#9fd8ff', 3, 1.4, s.ownerSlot);
           playSfx('shot');
         }
       } else {
@@ -3324,7 +5216,6 @@
   function updateEnemies(dt) {
     const mainTarget = state.commandCenter || getNearestCommandTarget(state.player.x, state.player.y);
     if (!mainTarget) return;
-    const mainPos = getBuildingCenter(mainTarget);
 
     for (let i = enemies.length - 1; i >= 0; i -= 1) {
       const e = enemies[i];
@@ -3340,16 +5231,21 @@
         e.dashTimer = 0.9;
       }
 
+      const commandTarget = getNearestCommandTarget(e.x, e.y) || mainTarget;
+      const commandPos = getBuildingCenter(commandTarget);
+      const dToCommand = dist(e.x, e.y, commandPos.x, commandPos.y);
+      const canMeleeCommand = isEntityNearBuildingDock(e, commandTarget, e.attackRange + 4);
+
       if (e.repathCd <= 0) {
         e.repathCd = randRange(0.7, 1.1);
         e.wallTargetId = 0;
 
-        const strictPath = findEnemyPath(e, 'strict');
+        const strictPath = findEnemyPath(e, 'strict', commandTarget);
         if (strictPath && strictPath.length > 0) {
           e.path = strictPath;
           e.pathIndex = 0;
         } else {
-          const softPath = findEnemyPath(e, 'wallSoft');
+          const softPath = findEnemyPath(e, 'wallSoft', commandTarget);
           if (softPath && softPath.length > 0) {
             const wall = findFirstWallOnPath(softPath);
             if (wall) {
@@ -3393,18 +5289,13 @@
         }
       }
 
-      const commandTarget = getNearestCommandTarget(e.x, e.y) || mainTarget;
-      const commandPos = getBuildingCenter(commandTarget);
-      const dToCommand = dist(e.x, e.y, commandPos.x, commandPos.y);
-      const canMeleeCommand = isEntityNearBuildingDock(e, commandTarget, e.attackRange + 4);
-
       if (!canMeleeCommand) {
         if (e.path && e.path.length > 0) {
           followTilePath(e, e.baseSpeed * (e.dashTimer > 0 ? 1.8 : 1), dt);
         } else {
-          const d = dist(e.x, e.y, mainPos.x, mainPos.y);
-          const dx = (mainPos.x - e.x) / (d || 1);
-          const dy = (mainPos.y - e.y) / (d || 1);
+          const d = dist(e.x, e.y, commandPos.x, commandPos.y);
+          const dx = (commandPos.x - e.x) / (d || 1);
+          const dy = (commandPos.y - e.y) / (d || 1);
           moveEntityWithCollision(e, dx * e.baseSpeed, dy * e.baseSpeed, dt);
         }
       } else {
@@ -3455,19 +5346,21 @@
         for (let ei = enemies.length - 1; ei >= 0; ei -= 1) {
           const e = enemies[ei];
           if (dist2(p.x, p.y, e.x, e.y) <= (p.radius + e.r) * (p.radius + e.r)) {
-            damageTarget(e, p.damage);
+            damageTarget(e, p.damage, p.ownerSlot);
             hit = true;
             break;
           }
         }
       } else {
-        const cc = state.commandCenter;
-        if (cc) {
+        const commands = getAllCommandCenters();
+        for (let ci = 0; ci < commands.length; ci += 1) {
+          const cc = commands[ci];
           const ccPos = getBuildingCenter(cc);
           const rr = Math.max(cc.w, cc.h) * TILE * 0.55;
           if (dist2(p.x, p.y, ccPos.x, ccPos.y) <= (p.radius + rr) * (p.radius + rr)) {
             damageTarget(cc, p.damage);
             hit = true;
+            break;
           }
         }
 
@@ -3560,6 +5453,7 @@
   }
 
   function updateHud() {
+    recalcPopulationLimit();
     mineralValueEl.textContent = Math.floor(state.resources).toString();
     populationValueEl.textContent = `${getPopulationUsed()} / ${state.populationLimit}`;
     if (spawnWorkerButton) {
@@ -3678,10 +5572,7 @@
 
       if (!isRectVisible(b.c * TILE, b.r * TILE, rw, rh)) continue;
 
-      let color = BUILD_TYPES[b.type].color;
-      if (b.flash > 0) {
-        color = '#f8ffff';
-      }
+      const color = getOwnedBuildingColor(BUILD_TYPES[b.type].color, b.ownerSlot, b.flash);
 
       ctx.fillStyle = color;
       ctx.fillRect(rx + 2, ry + 2, rw - 4, rh - 4);
@@ -3689,6 +5580,12 @@
       ctx.strokeStyle = 'rgba(0,0,0,0.45)';
       ctx.strokeRect(rx + 2, ry + 2, rw - 4, rh - 4);
       drawBuildingIcon(b, rx + 2, ry + 2, rw - 4, rh - 4);
+
+      if (isMultiplayerActive() && Number.isInteger(b.ownerSlot)) {
+        ctx.fillStyle = isLocalOwnerSlot(b.ownerSlot) ? '#0d2f1f' : '#102844';
+        ctx.font = 'bold 10px Trebuchet MS';
+        ctx.fillText(isLocalOwnerSlot(b.ownerSlot) ? '내 건물' : '상대 건물', rx + 5, ry + rh - 6);
+      }
 
       if ((b.type === 'barracks' || b.type === 'turret') && b.level > 1) {
         ctx.fillStyle = '#0a1520';
@@ -3712,10 +5609,15 @@
       }
     }
 
+    drawRemoteBuildings();
+
     for (let i = 0; i < soldiers.length; i += 1) {
       const s = soldiers[i];
       if (!discovered[toIndex(worldToTileX(s.x), worldToTileY(s.y))]) continue;
-      drawUnitCircle(s.x, s.y, s.r, s.flash > 0 ? '#f8ffff' : '#6dc7ff');
+      const soldierColor = s.flash > 0
+        ? '#f8ffff'
+        : getOwnedUnitColor(s.ownerSlot, '#6dc7ff', OWNER_REMOTE_UNIT_TINT);
+      drawUnitCircle(s.x, s.y, s.r, soldierColor);
       if (s.hp < s.maxHp) {
         drawHpBar(s.x - 10 - state.camera.x, s.y - 16 - state.camera.y, 20, 3, s.hp / s.maxHp, '#87ff90');
       }
@@ -3726,6 +5628,8 @@
       if (!discovered[toIndex(worldToTileX(scv.x), worldToTileY(scv.y))]) continue;
       drawMiniScv(scv);
     }
+
+    drawRemoteUnits();
 
     for (let i = 0; i < enemies.length; i += 1) {
       const e = enemies[i];
@@ -3741,6 +5645,7 @@
     }
 
     drawPlayer();
+    drawRemotePlayer();
 
     for (let i = 0; i < projectiles.length; i += 1) {
       const p = projectiles[i];
@@ -3863,10 +5768,61 @@
     ctx.restore();
   }
 
+  function drawRemoteBuildings() {
+    if (!isMultiplayerActive()) return;
+    const list = Array.isArray(state.multiplayer.remoteBuildings) ? state.multiplayer.remoteBuildings : [];
+    if (list.length === 0) return;
+
+    for (let i = 0; i < list.length; i += 1) {
+      const rb = list[i];
+      const c = Number(rb.c) || 0;
+      const r = Number(rb.r) || 0;
+      const wTile = Math.max(1, Number(rb.w) || 1);
+      const hTile = Math.max(1, Number(rb.h) || 1);
+      if (!inBounds(c, r)) continue;
+
+      const localB = getBuildingAtTile(c, r);
+      if (localB && localB.type === rb.type && localB.c === c && localB.r === r) {
+        continue;
+      }
+
+      const rx = c * TILE - state.camera.x;
+      const ry = r * TILE - state.camera.y;
+      const rw = wTile * TILE;
+      const rh = hTile * TILE;
+      if (!isRectVisible(c * TILE, r * TILE, rw, rh)) continue;
+
+      const isCommand = rb.type === 'command';
+      const ownerSlot = Number.isInteger(rb.ownerSlot) ? rb.ownerSlot : null;
+      const fillColor = isCommand
+        ? getOwnedBuildingColor('#6faeff', ownerSlot, 0)
+        : getOwnedBuildingColor('#7aa6c7', ownerSlot, 0);
+      ctx.save();
+      ctx.globalAlpha = 0.78;
+      ctx.fillStyle = fillColor;
+      ctx.fillRect(rx + 2, ry + 2, rw - 4, rh - 4);
+      ctx.strokeStyle = isCommand ? 'rgba(88, 176, 255, 0.95)' : 'rgba(140, 176, 201, 0.9)';
+      ctx.strokeRect(rx + 2, ry + 2, rw - 4, rh - 4);
+      drawBuildingIcon({ type: rb.type || 'wall', level: Number(rb.level) || 1 }, rx + 2, ry + 2, rw - 4, rh - 4);
+      ctx.fillStyle = 'rgba(14, 32, 58, 0.9)';
+      ctx.font = 'bold 10px Trebuchet MS';
+      ctx.fillText(isLocalOwnerSlot(ownerSlot) ? '내 건물' : '상대 건물', rx + 5, ry + rh - 6);
+      ctx.restore();
+
+      const hp = Number(rb.hp) || 0;
+      const maxHp = Number(rb.maxHp) || 0;
+      if (maxHp > 0 && hp >= 0 && hp < maxHp) {
+        drawHpBar(rx + rw * 0.12, ry - 7, rw * 0.76, 4, hp / maxHp, '#8eb8ff');
+      }
+    }
+  }
+
   function drawMiniScv(scv) {
     const x = scv.x - state.camera.x;
     const y = scv.y - state.camera.y;
-    const bodyColor = scv.flash > 0 ? '#ffffff' : '#7cf5e8';
+    const bodyColor = scv.flash > 0
+      ? '#ffffff'
+      : getOwnedUnitColor(scv.ownerSlot, OWNER_LOCAL_UNIT_TINT, OWNER_REMOTE_UNIT_TINT);
 
     ctx.save();
     ctx.translate(x, y);
@@ -3904,6 +5860,42 @@
     ctx.restore();
   }
 
+  function drawRemoteUnits() {
+    if (!isMultiplayerActive()) return;
+    const list = Array.isArray(state.multiplayer.remoteUnits) ? state.multiplayer.remoteUnits : [];
+    for (let i = 0; i < list.length; i += 1) {
+      const u = list[i];
+      const x = Number(u.x) || 0;
+      const y = Number(u.y) || 0;
+      const r = Math.max(2, Number(u.r) || 8);
+      if (x <= 0 && y <= 0) continue;
+      if (!isRectVisible(x - r, y - r, r * 2, r * 2)) continue;
+
+      const kind = u.kind || '';
+      const ownerSlot = Number.isInteger(u.ownerSlot) ? u.ownerSlot : null;
+      const color = kind === 'miniScv'
+        ? getOwnedUnitColor(ownerSlot, '#a6f6ee', OWNER_REMOTE_UNIT_TINT)
+        : getOwnedUnitColor(ownerSlot, '#a9c7ff', OWNER_REMOTE_UNIT_TINT);
+      drawUnitCircle(x, y, r, color);
+
+      if (kind === 'miniScv') {
+        const ang = Number(u.facing) || 0;
+        const px = x - state.camera.x + Math.cos(ang) * r * 0.75;
+        const py = y - state.camera.y + Math.sin(ang) * r * 0.75;
+        ctx.fillStyle = '#2f6f7e';
+        ctx.beginPath();
+        ctx.arc(px, py, Math.max(1.5, r * 0.3), 0, Math.PI * 2);
+        ctx.fill();
+      }
+
+      const hp = Number(u.hp) || 0;
+      const maxHp = Number(u.maxHp) || 0;
+      if (maxHp > 0 && hp >= 0 && hp < maxHp) {
+        drawHpBar(x - 10 - state.camera.x, y - 16 - state.camera.y, 20, 3, hp / maxHp, '#9ac1ff');
+      }
+    }
+  }
+
   function drawHpBar(x, y, w, h, ratio, color) {
     const r = clamp(ratio, 0, 1);
     ctx.fillStyle = 'rgba(0, 0, 0, 0.6)';
@@ -3937,6 +5929,36 @@
     if (p.hp < p.maxHp) {
       drawHpBar(x - 14, y - 19, 28, 4, p.hp / p.maxHp, '#94ffd3');
     }
+  }
+
+  function drawRemotePlayer() {
+    if (!isMultiplayerActive()) return;
+    if (!state.multiplayer.remotePlayerId) return;
+    const rp = state.multiplayer.remotePlayer;
+    if (!rp.online) return;
+    if (rp.drawX <= 0 && rp.drawY <= 0) return;
+
+    const x = rp.drawX - state.camera.x;
+    const y = rp.drawY - state.camera.y;
+    if (x < -30 || y < -30 || x > state.viewW + 30 || y > state.viewH + 30) return;
+
+    ctx.save();
+    ctx.translate(x, y);
+    ctx.rotate(rp.drawFacing || 0);
+    ctx.fillStyle = '#7dffe3';
+    ctx.beginPath();
+    ctx.moveTo(12, 0);
+    ctx.lineTo(-7, -8);
+    ctx.lineTo(-7, 8);
+    ctx.closePath();
+    ctx.fill();
+    ctx.fillStyle = '#1f6d63';
+    ctx.fillRect(-4, -4, 8, 8);
+    ctx.restore();
+
+    ctx.fillStyle = '#9df7e5';
+    ctx.font = '11px Trebuchet MS';
+    ctx.fillText(state.multiplayer.remotePlayerId, x - 16, y - 15);
   }
 
   function drawBuildPreview() {
@@ -4039,7 +6061,9 @@
       const b = buildings[i];
       if (!discovered[toIndex(b.c, b.r)]) continue;
 
-      if (b.type === 'command') {
+      if (isMultiplayerActive() && Number.isInteger(b.ownerSlot)) {
+        miniCtx.fillStyle = isLocalOwnerSlot(b.ownerSlot) ? '#58f58c' : '#6aaeff';
+      } else if (b.type === 'command') {
         miniCtx.fillStyle = '#58f58c';
       } else {
         miniCtx.fillStyle = '#8bc6ff';
@@ -4062,6 +6086,15 @@
     miniCtx.fillStyle = '#ffffff';
     miniCtx.fillRect(pc * sx, pr * sy, Math.max(2, sx), Math.max(2, sy));
 
+    if (isMultiplayerActive() && state.multiplayer.remotePlayerId && state.multiplayer.remotePlayer.online) {
+      const rc = worldToTileX(state.multiplayer.remotePlayer.x);
+      const rr = worldToTileY(state.multiplayer.remotePlayer.y);
+      if ((state.multiplayer.remotePlayer.x > 0 || state.multiplayer.remotePlayer.y > 0) && inBounds(rc, rr)) {
+        miniCtx.fillStyle = '#7dffe3';
+        miniCtx.fillRect(rc * sx, rr * sy, Math.max(2, sx), Math.max(2, sy));
+      }
+    }
+
     const camC = state.camera.x / TILE;
     const camR = state.camera.y / TILE;
     const camW = state.viewW / TILE;
@@ -4073,8 +6106,14 @@
 
   function update(dt) {
     updateBgm(dt);
+    const authority = !isMultiplayerActive() || isAuthorityClient();
+    if (state.multiplayer.lobbyActive || state.multiplayer.active) {
+      maintainRoomSocket(dt);
+      smoothRemotePlayer(dt);
+    }
 
     if (state.inLobby) {
+      pollRoomState(dt).catch(() => {});
       updateEffects(dt);
       updateCamera(dt);
       updateHud();
@@ -4082,6 +6121,9 @@
     }
 
     if (state.phase === PHASE_GAMEOVER) {
+      if (state.multiplayer.active) {
+        pollRoomState(dt).catch(() => {});
+      }
       updateEffects(dt);
       updateCamera(dt);
       updateHud();
@@ -4091,14 +6133,49 @@
     const paused = state.phase === PHASE_REWARD || state.upgradePanelOpen || state.barracksPanelOpen;
 
     if (!paused) {
-      state.runTime += dt;
-      updateWaveSystem(dt);
-      updatePlayer(dt);
-      updateBuildings(dt);
-      updateMiniScvs(dt);
-      updateSoldiers(dt);
-      updateEnemies(dt);
-      updateProjectiles(dt);
+      if (authority) {
+        if (state.multiplayer.active) {
+          syncRemoteMemberStateIntoAuthorityWorld();
+        }
+        state.runTime += dt;
+        updateWaveSystem(dt);
+        updatePlayer(dt);
+        updateBuildings(dt);
+        updateMiniScvs(dt);
+        updateSoldiers(dt);
+        updateEnemies(dt);
+        updateProjectiles(dt);
+      } else {
+        if (state.multiplayer.sharedWorld) {
+          applySharedWorldSnapshot(state.multiplayer.sharedWorld);
+        }
+        updatePlayer(dt);
+      }
+    } else if (!authority && state.multiplayer.sharedWorld) {
+      applySharedWorldSnapshot(state.multiplayer.sharedWorld);
+    }
+
+    if (state.multiplayer.active) {
+      syncSharedFogOfWar();
+    }
+
+    if (
+      state.multiplayer.active
+      && authority
+      && state.phase === PHASE_REWARD
+      && state.multiplayer.rewardChosen
+      && areAllPlayersRewardChosen()
+    ) {
+      advanceWaveAfterRewardChoice();
+    }
+
+    if (state.multiplayer.active) {
+      pollRoomState(dt).catch(() => {});
+      state.multiplayer.heartbeatTimer -= dt;
+      if (state.multiplayer.heartbeatTimer <= 0) {
+        state.multiplayer.heartbeatTimer = ROOM_HEARTBEAT_INTERVAL;
+        reportRoomHeartbeat();
+      }
     }
 
     updateEffects(dt);
@@ -4149,6 +6226,7 @@
   }
 
   function handleGlobalKeyDown(e) {
+    if (e.defaultPrevented) return;
     state.keys[e.code] = true;
 
     if (!state.audioUnlocked) {
@@ -4299,6 +6377,17 @@
 
   function setupDomEvents() {
     window.addEventListener('resize', resizeCanvas);
+    window.addEventListener('beforeunload', () => {
+      if (!navigator.sendBeacon) return;
+      if (!state.playerId || !state.multiplayer.roomCode) return;
+      if (!state.multiplayer.lobbyActive && !state.multiplayer.active) return;
+      const body = JSON.stringify({
+        playerId: state.playerId,
+        roomCode: state.multiplayer.roomCode,
+      });
+      const blob = new Blob([body], { type: 'application/json' });
+      navigator.sendBeacon(apiUrl('/api/rooms/leave'), blob);
+    });
 
     document.addEventListener('keydown', handleGlobalKeyDown);
     document.addEventListener('keyup', handleGlobalKeyUp);
@@ -4376,12 +6465,53 @@
       });
     }
 
+    if (createRoomButton) {
+      createRoomButton.addEventListener('click', () => {
+        createRoomFromLobby();
+      });
+    }
+
+    if (joinRoomButton) {
+      joinRoomButton.addEventListener('click', () => {
+        joinRoomFromLobby();
+      });
+    }
+
+    if (readyRoomButton) {
+      readyRoomButton.addEventListener('click', () => {
+        toggleRoomReadyFromLobby();
+      });
+    }
+
+    if (leaveRoomButton) {
+      leaveRoomButton.addEventListener('click', () => {
+        leaveRoomFromLobby();
+      });
+    }
+
     if (nicknameInputEl) {
       nicknameInputEl.addEventListener('keydown', (e) => {
         if (e.code === 'Enter' || e.code === 'NumpadEnter') {
           startGameFromLobby();
           e.preventDefault();
         }
+      });
+    }
+
+    if (roomCodeInputEl) {
+      roomCodeInputEl.addEventListener('input', () => {
+        if (!roomCodeInputEl) return;
+        roomCodeInputEl.value = roomCodeInputEl.value.toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 12);
+      });
+      roomCodeInputEl.addEventListener('keydown', (e) => {
+        if (e.code === 'Enter' || e.code === 'NumpadEnter') {
+          joinRoomFromLobby();
+          e.preventDefault();
+        }
+      });
+      roomCodeInputEl.addEventListener('blur', () => {
+        const code = getRoomCodeInput();
+        if (code) saveRoomCode(code);
       });
     }
 
@@ -4406,17 +6536,6 @@
     if (barracksCloseButton) {
       barracksCloseButton.addEventListener('click', () => {
         closeBarracksOverlay();
-      });
-    }
-
-    if (centerCameraButton) {
-      centerCameraButton.addEventListener('click', () => {
-        const cc = state.commandCenter;
-        if (!cc) return;
-        const cp = getBuildingCenter(cc);
-        state.player.x = cp.x;
-        state.player.y = cp.y + TILE * 2;
-        state.centerCameraTimer = 0.7;
       });
     }
 

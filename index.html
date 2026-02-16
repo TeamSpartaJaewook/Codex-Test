@@ -27,7 +27,6 @@
 
           <button id="upgradeOpenButton" class="sideBtn" type="button">업그레이드 열기</button>
           <button id="spawnWorkerButton" class="sideBtn" type="button">일꾼 생산 (E)</button>
-          <button id="centerCameraButton" class="sideBtn" type="button">본진으로</button>
         </aside>
       </main>
 
@@ -73,10 +72,25 @@
       <section id="lobbyOverlay" class="overlay" aria-hidden="false">
         <div class="overlayPanel lobbyPanel">
           <h2>Mineral Survivor: Defense</h2>
-          <p>아이디를 입력하고 시작하세요. (중복 아이디는 시작 불가)</p>
+          <p>아이디를 입력하고 시작하세요. (중복 아이디는 솔로 시작 불가)</p>
           <div class="lobbyRow">
             <input id="nicknameInput" class="lobbyInput" type="text" maxlength="16" placeholder="아이디" />
-            <button id="startGameButton" class="sideBtn" type="button">게임 시작</button>
+            <button id="startGameButton" class="sideBtn" type="button">솔로 시작</button>
+          </div>
+          <div class="multiPanel">
+            <div class="panelTitle">2인 멀티 로비</div>
+            <div class="lobbyRow multiJoinRow">
+              <input id="roomCodeInput" class="lobbyInput" type="text" maxlength="12" placeholder="방 코드(직접 지정 가능)" />
+              <button id="createRoomButton" class="sideBtn" type="button">방 만들기</button>
+              <button id="joinRoomButton" class="sideBtn" type="button">방 입장</button>
+            </div>
+            <div id="roomStatusText" class="roomStatus">현재 방: 없음</div>
+            <div id="roomPlayersText" class="roomPlayers">참여자: -</div>
+            <div id="roomReadyText" class="roomReady">레디 상태: -</div>
+            <div class="lobbyRow multiControlRow">
+              <button id="readyRoomButton" class="sideBtn" type="button">레디</button>
+              <button id="leaveRoomButton" class="sideBtn" type="button">방 나가기</button>
+            </div>
           </div>
           <div id="bestRecordSummary" class="bestSummary">최고기록: -</div>
           <div class="rankingWrap">
