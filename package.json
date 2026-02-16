@@ -6,6 +6,10 @@
   "engines": {
     "node": ">=20"
   },
+  "dependencies": {
+    "xlsx": "^0.18.5",
+    "ws": "^8.18.1"
+  },
   "scripts": {
     "prestart": "node tools/balance-tool.js build",
     "start": "node server.js",

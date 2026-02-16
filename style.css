@@ -230,6 +230,36 @@ body {
   font-size: 14px;
 }
 
+.multiPanel {
+  margin-bottom: 14px;
+  border: 1px solid rgba(109, 180, 211, 0.35);
+  border-radius: 10px;
+  padding: 10px;
+  background: rgba(7, 22, 33, 0.72);
+}
+
+.multiJoinRow {
+  grid-template-columns: 1fr auto auto;
+}
+
+.multiControlRow {
+  grid-template-columns: auto auto;
+}
+
+.roomStatus,
+.roomPlayers {
+  font-size: 13px;
+  color: #c4e9fa;
+  margin: 6px 0;
+}
+
+.roomReady {
+  font-size: 13px;
+  color: #b7ffe0;
+  margin: 6px 0 10px;
+  font-weight: 700;
+}
+
 .bestSummary {
   margin: 8px 0 14px;
   color: #d5f7ff;
